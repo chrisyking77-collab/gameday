@@ -1280,7 +1280,7 @@ export default function App(){
     NHL:[{id:"hlsc",i:"🏒",l:"Scores"},{id:"hlst",i:"📊",l:"Standings"},{id:"hlro",i:"👥",l:"Rosters"},{id:"hlsa",i:"📈",l:"Stats"},{id:"hlh2h",i:"⚔️",l:"H2H"}],
     CFB:[{id:"csc",i:"🏈",l:"Scores"},{id:"crk",i:"🏆",l:"Rankings"},{id:"cro",i:"📋",l:"Rosters"},{id:"cst",i:"📈",l:"Stats"}],
     CBB:[{id:"bsc",i:"🏀",l:"Scores"},{id:"brk",i:"🏆",l:"Rankings"},{id:"bro",i:"📋",l:"Rosters"},{id:"bst",i:"📈",l:"Stats"}],
-    LAX:[{id:"lxsc",i:"🥍",l:"Scores"},{id:"lxrk",i:"🏆",l:"Rankings"},{id:"lxro",i:"📋",l:"Rosters"},{id:"lxst",i:"📈",l:"Stats"}],
+    LAX:[{id:"lxsc",i:"🥍",l:"Scores"},{id:"lxro",i:"📋",l:"Teams"}],
     FAN:[{id:"fan",i:"⚡",l:"Fantasy"},{id:"trn",i:"🔥",l:"Waivers"},{id:"drft",i:"📋",l:"Draft"},{id:"trd",i:"⚖️",l:"Trade"},{id:"cmp",i:"🔄",l:"Compare"}],
     ODDS:[{id:"bet",i:"💰",l:"Betting"},{id:"par",i:"🎯",l:"Parlay"},{id:"prop",i:"🎲",l:"Props"},{id:"ocp",i:"📊",l:"Compare"}],
     MORE:[{id:"inj",i:"🏥",l:"Injuries"},{id:"nw",i:"📰",l:"News"},{id:"promo",i:"🎁",l:"Promos"}]
@@ -1343,9 +1343,7 @@ export default function App(){
       {sub==="bro"&&<Rosters title="CBB Rosters" teams={CBB} sport="cbb" nf="n" cf="cl" lf={t=>cL(t.eid)}/>}
       {sub==="bst"&&<Stats sport="cbb" title="CBB Stat Leaders" color={S.or}/>}
       {sub==="lxsc"&&<Scores sport="clx" title="🥍 Lacrosse Scores" yearRange={[2026,2025,2024,2023]} defYear={2025} color={"#7c3aed"}/>}
-      {sub==="lxrk"&&<Rankings title="🥍 Lacrosse Rankings" sport="clx" yearRange={[2026,2025,2024,2023]} defYear={2025} color={"#7c3aed"} mw={18} defWk={14}/>}
-      {sub==="lxro"&&<Rosters title="🥍 Lacrosse Rosters" teams={CLX} sport="clx" nf="n" cf="cl" lf={t=>cL(t.eid)}/>}
-      {sub==="lxst"&&<Stats sport="clx" title="🥍 Lacrosse Stat Leaders" color={"#7c3aed"}/>}
+      {sub==="lxro"&&<Rosters title="🥍 Lacrosse Teams" teams={CLX} sport="clx" nf="n" cf="cl" lf={t=>cL(t.eid)}/>}
       {sub==="nbsc"&&<Scores sport="nba" title="NBA Scores" yearRange={[2026,2025,2024,2023]} defYear={2025} color={S.pp}/>}
       {sub==="nbst"&&<Standings sport="nba"/>}
       {sub==="nbro"&&<Rosters title="NBA Rosters" teams={NBA} sport="nba" nf="f" cf="cl" lf={t=>nbL(t.eid)}/>}
