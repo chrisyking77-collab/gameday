@@ -77,7 +77,7 @@ const SB=({l,v,c})=><Card style={{padding:12,textAlign:"center"}}><div style={{f
 // ═══ RICH PLAYER MODAL — bio, stats, news, game log, ESPN link ═══
 function PM({pid,info,sport,onClose}){
   const[prof,setProf]=useState(null);const[news,setNews]=useState([]);const[games,setGames]=useState([]);const[ld,setLd]=useState(true);const[tab,setTab]=useState("overview");
-  const sp=sport==="nfl"?"football/nfl":sport==="cfb"?"football/college-football":"basketball/mens-college-basketball";
+  const sp=({nfl:"football/nfl",cfb:"football/college-football",cbb:"basketball/mens-college-basketball",nba:"basketball/nba",mlb:"baseball/mlb",nhl:"hockey/nhl",clx:"lacrosse/mens-college-lacrosse"})[sport]||sport;
   const spShort=sport==="nfl"?"nfl":sport==="cfb"?"college-football":"mens-college-basketball";
   useEffect(()=>{if(!pid)return;setLd(true);setProf(null);setNews([]);setGames([]);(async()=>{
     // 1. Try profile endpoint
@@ -541,7 +541,7 @@ function Rankings({title,sport,yearRange,defYear,color,mw,defWk}){
       for(let i=0;i<10;i++){
         const d=new Date(weekStart);d.setDate(d.getDate()+i);
         const ds2=d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
-        const sb=await ef(`${E.cbb}/scoreboard?dates=${ds2}&limit=200&groups=50`);
+        const sb=await ef(`${E[sport]}/scoreboard?dates=${ds2}&limit=200&groups=50`);
         (sb?.events||[]).forEach(ev=>{(ev.competitions?.[0]?.competitors||[]).forEach(c=>{
           const rk=c.curatedRank?.current;
           if(rk&&rk<=25&&!ranked[c.team?.id])ranked[c.team?.id]={rank:rk,name:c.team?.displayName||"",logo:c.team?.logo||"",record:c.records?.[0]?.summary||"—",id:c.team?.id};
@@ -571,7 +571,7 @@ function Rankings({title,sport,yearRange,defYear,color,mw,defWk}){
 // ═══ ROSTERS ═══
 function Rosters({title,teams,sport,nf,cf,lf}){
   const[sel,setSel]=useState(null);const[players,setPlayers]=useState([]);const[ld,setLd]=useState(false);const[posF,setPosF]=useState("ALL");const[srch,setSrch]=useState("");const[selP,setSelP]=useState(null);
-  const sp=sport==="nfl"?"football/nfl":sport==="cfb"?"football/college-football":"basketball/mens-college-basketball";
+  const sp=({nfl:"football/nfl",cfb:"football/college-football",cbb:"basketball/mens-college-basketball",nba:"basketball/nba",mlb:"baseball/mlb",nhl:"hockey/nhl",clx:"lacrosse/mens-college-lacrosse"})[sport]||sport;
   useEffect(()=>{if(!sel)return;setLd(true);setPlayers([]);setPosF("ALL");setSrch("");(async()=>{
     // Try multiple roster URL patterns — college teams sometimes need different paths
     let all=[];
