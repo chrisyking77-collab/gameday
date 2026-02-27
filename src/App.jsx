@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 // ═══ CONFIG ═══
-const OK="5d7725f468024e0572ed41f5e5f47558";
+const OK="d5bb3a04cd44bbc4bf1579c02d6d35bd";
 const E={nfl:"https://site.api.espn.com/apis/site/v2/sports/football/nfl",cfb:"https://site.api.espn.com/apis/site/v2/sports/football/college-football",cbb:"https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball",nba:"https://site.api.espn.com/apis/site/v2/sports/basketball/nba",mlb:"https://site.api.espn.com/apis/site/v2/sports/baseball/mlb",nhl:"https://site.api.espn.com/apis/site/v2/sports/hockey/nhl",clx:"https://site.api.espn.com/apis/site/v2/sports/lacrosse/mens-college-lacrosse"};
 const SD={bg:"#0a0e14",sf:"#111820",cd:"#161d27",bd:"#1e2a38",bh:"#2a3a4e",tx:"#edf2f7",sub:"#7f8ea0",dm:"#475569",ac:"#3b82f6",gn:"#10b981",rd:"#ef4444",yl:"#eab308",or:"#f97316",pp:"#a855f7",pk:"#ec4899",tl:"#06b6d4"};
 const SL={bg:"#f0f2f5",sf:"#ffffff",cd:"#ffffff",bd:"#e2e8f0",bh:"#cbd5e1",tx:"#1a202c",sub:"#4a5568",dm:"#94a3b8",ac:"#2563eb",gn:"#059669",rd:"#dc2626",yl:"#ca8a04",or:"#ea580c",pp:"#7c3aed",pk:"#db2777",tl:"#0891b2"};
@@ -403,12 +403,12 @@ function Standings({sport="nfl"}){
     </Card>)}</div>}</div>;
 }
 
-// Stats - NFL uses Sleeper (real stats), CFB/CBB uses scoreboard leaders
+// Stats - NFL uses Sleeper (real stats), all others use ESPN scoreboard leaders
 function Stats({sport="nfl",title="Stats",color}){
   const[leaders,setLeaders]=useState({});const[ld,setLd]=useState(true);const[err,setErr]=useState(null);const[cat,setCat]=useState("");const[selP,setSelP]=useState(null);
   const isNfl=sport==="nfl";const isCfb=sport==="cfb";const isCbb=sport==="cbb";const isNba=sport==="nba";const isMlb=sport==="mlb";const isNhl=sport==="nhl";
   const defYr=(isCbb||isNba||isNhl)?2026:2025;const years=(isCbb||isNba||isNhl)?[2026,2025,2024,2023]:[2025,2024,2023,2022];
-  const maxW=isNfl?18:isCfb?15:isNba?25:isMlb?30:isNhl?25:20;const hasWeeks=isNfl||isCfb;
+  const maxW=isNfl?18:isCfb?15:isNba?30:isMlb?26:isNhl?30:20;const hasWeeks=isNfl||isCfb;
   const[yr,setYr]=useState(defYr);const[mode,setMode]=useState("season");const[wk,setWk]=useState(isNfl?1:isCfb?15:12);
   const ep=E[sport];const clr=color||(isNfl?S.gn:isCfb?S.ac:S.or);
   useEffect(()=>{setLd(true);setErr(null);setLeaders({});setCat("");(async()=>{
@@ -457,36 +457,59 @@ function Stats({sport="nfl",title="Stats",color}){
         else setErr("No data for week "+wk);
       }
     } else {
-      // CFB/CBB: scoreboard leaders (only source available)
-      const cats={};const extra=isCfb?"&groups=80":"&groups=50";
-      const fetchWk=async w=>ef(`${ep}/scoreboard?dates=${yr}&seasontype=2&week=${w}&limit=200${extra}`);
-      const fetchDt=async ds=>ef(`${ep}/scoreboard?dates=${ds}&limit=200&groups=50`);
-      const process=events=>{(events||[]).forEach(ev=>{const comp=ev.competitions?.[0];if(!comp)return;
-        (comp.leaders||[]).forEach(ldr=>{const cn=ldr.displayName||ldr.name||"Other";if(!cats[cn])cats[cn]=[];
-          (ldr.leaders||[]).forEach(l=>{const at=l.athlete||{};
-            cats[cn].push({id:at.id,name:at.displayName||at.shortName||at.fullName,pos:at.position?.abbreviation,espnId:at.id,
-              headshot:at.headshot,value:l.displayValue||"",numVal:parseYds(l.displayValue),
-              team:l.team?.abbreviation||"",teamObj:l.team||comp.competitors?.find(x=>String(x.team?.id)===String(at.teamId))?.team||{}});
-          });});});};
-      if(mode==="season"){
-        if(hasWeeks){const wks=Array.from({length:maxW},(_,i)=>i+1);const res=await Promise.allSettled(wks.map(w=>fetchWk(w)));
+      // Other sports: use ESPN leaders endpoint (fast!) + scoreboard fallback for CFB
+      const cats={};const extra=isCfb?"&groups=80":isCbb?"&groups=50":"";
+      if(hasWeeks){
+        // CFB: week-based scoreboard leaders (reasonable # of fetches)
+        const fetchWk=async w=>ef(`${ep}/scoreboard?dates=${yr}&seasontype=2&week=${w}&limit=200${extra}`);
+        const process=events=>{(events||[]).forEach(ev=>{const comp=ev.competitions?.[0];if(!comp)return;
+          (comp.leaders||[]).forEach(ldr=>{const cn=ldr.displayName||ldr.name||"Other";if(!cats[cn])cats[cn]=[];
+            (ldr.leaders||[]).forEach(l=>{const at=l.athlete||{};
+              cats[cn].push({id:at.id,name:at.displayName||at.shortName||at.fullName,pos:at.position?.abbreviation,espnId:at.id,
+                headshot:at.headshot,value:l.displayValue||"",numVal:parseYds(l.displayValue),
+                team:l.team?.abbreviation||"",teamObj:l.team||comp.competitors?.find(x=>String(x.team?.id)===String(at.teamId))?.team||{}});
+            });});});};
+        if(mode==="season"){
+          const wks=Array.from({length:maxW},(_,i)=>i+1);const res=await Promise.allSettled(wks.map(w=>fetchWk(w)));
           res.forEach(r=>{if(r.status==="fulfilled"&&r.value?.events)process(r.value.events);});
-        } else {const by=yr-1;const dates=[];
-          for(let m=10;m<12;m++)for(let d=1;d<=28;d+=3)dates.push(`${by}${String(m+1).padStart(2,"0")}${String(d).padStart(2,"0")}`);
-          for(let m=0;m<4;m++)for(let d=1;d<=28;d+=3)dates.push(`${yr}${String(m+1).padStart(2,"0")}${String(d).padStart(2,"0")}`);
-          const res=await Promise.allSettled(dates.map(d=>fetchDt(d)));res.forEach(r=>{if(r.status==="fulfilled"&&r.value?.events)process(r.value.events);});}
-        Object.keys(cats).forEach(k=>{const byP={};
-          cats[k].forEach(r=>{const key=r.id;if(!key)return;if(!byP[key])byP[key]={...r,totalVal:r.numVal};
-            else{byP[key].totalVal+=r.numVal;if(!byP[key].headshot&&r.headshot)byP[key].headshot=r.headshot;}});
-          cats[k]=Object.values(byP).map(r=>({...r,value:Math.round(r.totalVal).toLocaleString(),numVal:r.totalVal})).sort((a,b)=>b.numVal-a.numVal);});
+          Object.keys(cats).forEach(k=>{const byP={};
+            cats[k].forEach(r=>{const key=r.id;if(!key)return;if(!byP[key])byP[key]={...r,totalVal:r.numVal};
+              else{byP[key].totalVal+=r.numVal;if(!byP[key].headshot&&r.headshot)byP[key].headshot=r.headshot;}});
+            cats[k]=Object.values(byP).map(r=>({...r,value:Math.round(r.totalVal).toLocaleString(),numVal:r.totalVal})).sort((a,b)=>b.numVal-a.numVal);});
+        } else {
+          const sb=await fetchWk(wk);if(sb?.events)process(sb.events);
+          Object.keys(cats).forEach(k=>{const best={};cats[k].forEach(r=>{const key=r.id;if(!key)return;if(!best[key]||r.numVal>best[key].numVal)best[key]=r;});cats[k]=Object.values(best).sort((a,b)=>b.numVal-a.numVal);});
+        }
       } else {
-        if(hasWeeks){const sb=await fetchWk(wk);if(sb?.events)process(sb.events);}
-        else{const by=yr-1;const st2=new Date(by,10,4);st2.setDate(st2.getDate()+(wk-1)*7);
-          for(let i=0;i<7;i++){const d=new Date(st2);d.setDate(d.getDate()+i);const ds=d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");const sb=await fetchDt(ds);if(sb?.events)process(sb.events);}}
-        Object.keys(cats).forEach(k=>{const best={};cats[k].forEach(r=>{const key=r.id;if(!key)return;if(!best[key]||r.numVal>best[key].numVal)best[key]=r;});cats[k]=Object.values(best).sort((a,b)=>b.numVal-a.numVal);});
+        // NBA, MLB, NHL, CBB, LAX: use ESPN leaders endpoint (single fast call)
+        const sp2=({nba:"basketball/nba",mlb:"baseball/mlb",nhl:"hockey/nhl",cbb:"basketball/mens-college-basketball",clx:"lacrosse/mens-college-lacrosse"})[sport]||sport;
+        const ld2=await ef(`https://site.api.espn.com/apis/site/v2/sports/${sp2}/leaders`).catch(()=>null);
+        if(ld2?.leaders){
+          ld2.leaders.forEach(cat=>{const cn=cat.displayName||cat.name||"Other";cats[cn]=[];
+            (cat.leaders||[]).forEach(l=>{const at=l.athlete||{};
+              cats[cn].push({id:at.id,name:at.displayName||at.shortName||at.fullName||"Unknown",pos:at.position?.abbreviation,espnId:at.id,
+                headshot:at.headshot,value:l.displayValue||l.value||"",numVal:parseFloat(l.value)||parseYds(l.displayValue),
+                team:at.team?.abbreviation||"",teamObj:at.team||{}});
+            });
+            cats[cn].sort((a,b)=>b.numVal-a.numVal);
+          });
+        }
+        // Fallback: try scoreboard for recent games if leaders endpoint fails
+        if(Object.keys(cats).length===0){
+          const today=new Date();const ds=today.getFullYear()+String(today.getMonth()+1).padStart(2,"0")+String(today.getDate()).padStart(2,"0");
+          const sb=await ef(`${ep}/scoreboard?dates=${ds}&limit=100`).catch(()=>null);
+          if(sb?.events){(sb.events||[]).forEach(ev=>{const comp=ev.competitions?.[0];if(!comp)return;
+            (comp.leaders||[]).forEach(ldr=>{const cn=ldr.displayName||ldr.name||"Other";if(!cats[cn])cats[cn]=[];
+              (ldr.leaders||[]).forEach(l=>{const at=l.athlete||{};
+                cats[cn].push({id:at.id,name:at.displayName||at.shortName||at.fullName,pos:at.position?.abbreviation,espnId:at.id,
+                  headshot:at.headshot,value:l.displayValue||"",numVal:parseYds(l.displayValue),
+                  team:l.team?.abbreviation||"",teamObj:l.team||{}});
+              });});});}
+          Object.keys(cats).forEach(k=>{const best={};cats[k].forEach(r=>{const key=r.id;if(!key)return;if(!best[key]||r.numVal>best[key].numVal)best[key]=r;});cats[k]=Object.values(best).sort((a,b)=>b.numVal-a.numVal);});
+        }
       }
       if(Object.keys(cats).length>0){setLeaders(cats);setCat(Object.keys(cats)[0]);}
-      else setErr("No stats found");
+      else setErr("No stats found — try a different year");
     }
     setLd(false);
   })();},[yr,mode,wk]);
@@ -494,7 +517,7 @@ function Stats({sport="nfl",title="Stats",color}){
   // ESPN headshot URL from espnId or Sleeper player
   const getImg=r=>{const eid=r.espnId||r.id;if(!eid)return null;return hsUrl(r.headshot)||`https://a.espncdn.com/combiner/i?img=/i/headshots/nfl/players/full/${eid}.png&w=96&h=70&cb=1`;};
   return<div><h2 style={{fontFamily:F,fontSize:18,fontWeight:800,color:S.tx,margin:"0 0 4px"}}>{title}</h2>
-    <p style={{fontFamily:F,fontSize:11,color:S.dm,margin:"0 0 8px"}}>{isNfl?"Real stats via Sleeper API":mode==="season"?"Aggregated from game leaders":"Weekly game leaders"}</p>
+    <p style={{fontFamily:F,fontSize:11,color:S.dm,margin:"0 0 8px"}}>{isNfl?"Real stats via Sleeper API":hasWeeks?"Game leaders from ESPN scoreboards":"Season leaders from ESPN"}</p>
     <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{years.map(y=><Pill key={y} l={""+y} a={yr===y} c={S.yl} onClick={()=>setYr(y)}/>)}</div>
     <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}><Pill l="Full Season" a={mode==="season"} c={S.gn} onClick={()=>setMode("season")}/><Pill l="By Week" a={mode==="week"} c={S.tl} onClick={()=>setMode("week")}/></div>
     {mode==="week"&&<div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:8}}>{Array.from({length:hasWeeks?maxW:20},(_,i)=>i+1).map(w=><Pill key={w} l={"W"+w} a={wk===w} c={S.tl} onClick={()=>setWk(w)} sm/>)}</div>}
@@ -649,7 +672,11 @@ function ParlayBuilder(){
 // ═══ BETTING + TRACKER ═══
 function Betting(){
   const[nflG,setNflG]=useState([]);const[cfbG,setCfbG]=useState([]);const[cbbG,setCbbG]=useState([]);const[nbaG,setNbaG]=useState([]);const[mlbG,setMlbG]=useState([]);const[nhlG,setNhlG]=useState([]);const[futures,setFutures]=useState([]);const[ld,setLd]=useState(true);const[tab,setTab]=useState("nba");const[err,setErr]=useState(null);const[bets,setBets]=useBets();
-  useEffect(()=>{(async()=>{const m="spreads,h2h,totals";const base="https://api.the-odds-api.com/v4";
+  useEffect(()=>{(async()=>{
+    // Check cache first (odds don't change much in 15 min)
+    const cacheKey="_ghqOdds";const cached=window[cacheKey];const now=Date.now();
+    if(cached&&(now-cached.ts)<900000){setNflG(cached.nfl||[]);setCfbG(cached.cfb||[]);setCbbG(cached.cbb||[]);setNbaG(cached.nba||[]);setMlbG(cached.mlb||[]);setNhlG(cached.nhl||[]);setFutures(cached.fut||[]);setLd(false);return;}
+    const m="spreads,h2h,totals";const base="https://api.the-odds-api.com/v4";
     const rs=await Promise.allSettled([
       fetch(`${base}/sports/americanfootball_nfl/odds/?apiKey=${OK}&regions=us&markets=${m}&oddsFormat=american`).then(r=>r.ok?r.json():[]),
       fetch(`${base}/sports/americanfootball_ncaaf/odds/?apiKey=${OK}&regions=us&markets=${m}&oddsFormat=american`).then(r=>r.ok?r.json():[]),
@@ -661,8 +688,10 @@ function Betting(){
     ]);
     const[nfl,cfb,cbb,nba,mlb,nhl,fut]=rs.map(r=>r.status==="fulfilled"?r.value:[]);
     setNflG(nfl||[]);setCfbG(cfb||[]);setCbbG(cbb||[]);setNbaG(nba||[]);setMlbG(mlb||[]);setNhlG(nhl||[]);
-    if(!nfl?.length&&!cfb?.length&&!cbb?.length&&!nba?.length&&!mlb?.length&&!nhl?.length)setErr("Odds API returned no data — key may be rate-limited.");
-    setFutures((fut?.[0]?.bookmakers?.[0]?.markets?.[0]?.outcomes||[]).sort((a,b)=>Math.abs(a.price)-Math.abs(b.price)).slice(0,24));
+    if(!nfl?.length&&!cfb?.length&&!cbb?.length&&!nba?.length&&!mlb?.length&&!nhl?.length)setErr("Odds API rate-limited (500 free requests/month). Try again later or check game card odds in Scores tab.");
+    const futData=(fut?.[0]?.bookmakers?.[0]?.markets?.[0]?.outcomes||[]).sort((a,b)=>Math.abs(a.price)-Math.abs(b.price)).slice(0,24);
+    setFutures(futData);
+    window[cacheKey]={nfl,cfb,cbb,nba,mlb,nhl,fut:futData,ts:now};
     setLd(false);
   })();},[]);
   function gb(g,k){return g.bookmakers?.[0]?.markets?.find(m=>m.key===k);}
@@ -1090,8 +1119,8 @@ function PropBets(){
   const allProps="player_pass_tds,player_pass_yds,player_pass_completions,player_pass_attempts,player_pass_interceptions,player_rush_yds,player_rush_attempts,player_receptions,player_reception_yds,player_anytime_td,player_first_td,player_last_td,player_tackles_assists,player_kicking_points,player_field_goals";
   const bbProps="player_points,player_rebounds,player_assists,player_threes,player_blocks,player_steals,player_points_rebounds_assists,player_points_rebounds,player_points_assists,player_rebounds_assists,player_double_double,player_triple_double";
   const futuresSports={nfl:["americanfootball_nfl_super_bowl_winner","americanfootball_nfl_mvp"],cfb:["americanfootball_ncaaf_championship_winner"],cbb:["basketball_ncaab_championship_winner"]};
-  useEffect(()=>{setLd(true);const sp=sport==="nfl"?"americanfootball_nfl":sport==="cfb"?"americanfootball_ncaaf":"basketball_ncaab";
-    const mkts=sport==="cbb"?bbProps:allProps;
+  useEffect(()=>{setLd(true);const sp=sport==="nfl"?"americanfootball_nfl":sport==="cfb"?"americanfootball_ncaaf":sport==="nba"?"basketball_nba":sport==="mlb"?"baseball_mlb":sport==="nhl"?"icehockey_nhl":"basketball_ncaab";
+    const mkts=["cbb","nba"].includes(sport)?bbProps:allProps;
     const prom=[fetch(`https://api.the-odds-api.com/v4/sports/${sp}/odds/?apiKey=${OK}&regions=us&markets=${mkts}&oddsFormat=american`).then(r=>r.ok?r.json():[]).catch(()=>[])];
     (futuresSports[sport]||[]).forEach(fs=>{prom.push(fetch(`https://api.the-odds-api.com/v4/sports/${fs}/odds/?apiKey=${OK}&regions=us&markets=outrights&oddsFormat=american`).then(r=>r.ok?r.json():[]).catch(()=>[]));});
     Promise.all(prom).then(([g,...futs])=>{setGames(g||[]);
@@ -1101,7 +1130,7 @@ function PropBets(){
   const fmtMkt=k=>(k||"").replace(/player_/g,"").replace(/_/g," ").toUpperCase();
   return<div><h2 style={{fontFamily:F,fontSize:18,fontWeight:800,color:S.tx,margin:"0 0 4px"}}>🎯 Props & Futures</h2>
     <p style={{fontFamily:F,fontSize:11,color:S.dm,margin:"0 0 12px"}}>All player props + championship & award futures</p>
-    <div style={{display:"flex",gap:4,marginBottom:8}}>{[["nfl","🏈 NFL"],["cfb","🏈 CFB"],["cbb","🏀 CBB"]].map(([k,l])=><Pill key={k} l={l} a={sport===k} c={S.yl} onClick={()=>setSport(k)}/>)}</div>
+    <div style={{display:"flex",gap:4,marginBottom:8,flexWrap:"wrap"}}>{[["nfl","🏈 NFL"],["nba","🏀 NBA"],["mlb","⚾ MLB"],["nhl","🏒 NHL"],["cfb","🏈 CFB"],["cbb","🏀 CBB"]].map(([k,l])=><Pill key={k} l={l} a={sport===k} c={S.yl} onClick={()=>setSport(k)}/>)}</div>
     <div style={{display:"flex",gap:4,marginBottom:14}}><Pill l="🎲 Player Props" a={tab==="props"} c={S.pp} onClick={()=>setTab("props")}/><Pill l="🏆 Futures" a={tab==="futures"} c={S.or} onClick={()=>setTab("futures")}/></div>
     {ld?<Spin t="Loading all markets..."/>:tab==="futures"?<>{futures.length===0?<Emp t="No futures available right now" ic="🏆"/>:
       <Card style={{overflow:"auto",maxHeight:600}}><table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr style={{background:S.sf}}>{["RK","","ODDS","BOOK"].map(h=><th key={h} style={{padding:"6px 8px",fontFamily:F,fontSize:9,fontWeight:700,color:S.dm,textAlign:"left",borderBottom:"1px solid "+S.bd}}>{h}</th>)}</tr></thead>
@@ -1132,13 +1161,13 @@ function PropBets(){
 // ═══ ODDS COMPARISON (Multiple Books) ═══
 function OddsCompare(){
   const[games,setGames]=useState([]);const[ld,setLd]=useState(true);const[sport,setSport]=useState("nfl");
-  useEffect(()=>{setLd(true);const sp=sport==="nfl"?"americanfootball_nfl":sport==="cfb"?"americanfootball_ncaaf":"basketball_ncaab";
+  useEffect(()=>{setLd(true);const sp=sport==="nfl"?"americanfootball_nfl":sport==="cfb"?"americanfootball_ncaaf":sport==="nba"?"basketball_nba":sport==="mlb"?"baseball_mlb":sport==="nhl"?"icehockey_nhl":"basketball_ncaab";
     fetch(`https://api.the-odds-api.com/v4/sports/${sp}/odds/?apiKey=${OK}&regions=us&markets=h2h,spreads,totals&oddsFormat=american&bookmakers=draftkings,fanduel,betmgm,caesars,pointsbet`).then(r=>r.ok?r.json():[]).then(d=>{setGames(d||[]);setLd(false);}).catch(()=>setLd(false));
   },[sport]);
   const bkColors={draftkings:"#53d769",fanduel:"#1493ff",betmgm:"#c8a96e",caesars:"#00833e",pointsbet:"#e44d2e"};
   return<div><h2 style={{fontFamily:F,fontSize:18,fontWeight:800,color:S.tx,margin:"0 0 4px"}}>📊 Odds Comparison</h2>
     <p style={{fontFamily:F,fontSize:11,color:S.dm,margin:"0 0 12px"}}>Compare lines across sportsbooks — find the best value</p>
-    <div style={{display:"flex",gap:4,marginBottom:14}}>{[["nfl","🏈 NFL"],["cfb","🏈 CFB"],["cbb","🏀 CBB"]].map(([k,l])=><Pill key={k} l={l} a={sport===k} c={S.pp} onClick={()=>setSport(k)}/>)}</div>
+    <div style={{display:"flex",gap:4,marginBottom:14,flexWrap:"wrap"}}>{[["nfl","🏈 NFL"],["nba","🏀 NBA"],["mlb","⚾ MLB"],["nhl","🏒 NHL"],["cfb","🏈 CFB"],["cbb","🏀 CBB"]].map(([k,l])=><Pill key={k} l={l} a={sport===k} c={S.pp} onClick={()=>setSport(k)}/>)}</div>
     {ld?<Spin t="Loading odds from books..."/>:games.length===0?<Emp t="No odds available right now" ic="📊"/>:
     games.map((g,gi)=>{const gn=(g.away_team||"").split(" ").pop()+" vs "+(g.home_team||"").split(" ").pop();const books=g.bookmakers||[];
       return<Card key={g.id||gi} style={{marginBottom:12}}><div style={{height:3,background:S.pp+"50"}}/><div style={{padding:"12px 14px"}}>
