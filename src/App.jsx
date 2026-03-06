@@ -1252,6 +1252,328 @@ function NFLDraft(){
 }
 
 
+// ═══ NFL BIG BOARD — 2026 Draft Prospects ═══
+const DRAFT_POS=["All","QB","WR","EDGE","OT","CB","DL","LB","S","RB","TE","IOL"];
+const POS_COLORS={QB:"#e74c3c",RB:"#8e44ad",WR:"#e67e22",TE:"#1abc9c",OT:"#3498db",IOL:"#3498db",OL:"#3498db",EDGE:"#f39c12",DL:"#e74c3c",LB:"#9b59b6",CB:"#2ecc71",S:"#1abc9c",K:"#95a5a6",P:"#95a5a6",DE:"#f39c12",DT:"#e74c3c"};
+function BigBoard(){
+  const[prospects,setProspects]=useState([]);const[ld,setLd]=useState(true);const[pos,setPos]=useState("All");const[srch,setSrch]=useState("");const[sel,setSel]=useState(null);const[tab,setTab]=useState("board");
+  useEffect(()=>{(async()=>{
+    // Try ESPN draft prospects for 2026
+    try{
+      const d=await ef("https://site.api.espn.com/apis/site/v2/sports/football/nfl/draft/athletes?year=2026&limit=200");
+      if(d?.athletes?.length){
+        const mapped=d.athletes.map((a,i)=>({rk:a.rank||i+1,name:a.athlete?.displayName||"TBD",pos:a.athlete?.position?.abbreviation||"",school:a.athlete?.college?.name||"",
+          img:a.athlete?.headshot?.href||null,ht:a.athlete?.height||0,wt:a.athlete?.weight||0,yr:a.athlete?.experience?.abbreviation||"",
+          hometown:a.athlete?.birthPlace?.city?a.athlete.birthPlace.city+", "+(a.athlete.birthPlace.state||""):"",
+          rd:a.projectedRound||1,grade:a.grade||0,analysis:a.analysis||"",status:a.status||"",
+          stats:a.athlete?.statistics||[],eid:a.athlete?.id}));
+        setProspects(mapped);setLd(false);return;
+      }
+    }catch(e){}
+    // Fallback: try core API
+    try{
+      const d2=await ef(`${E.nfl}/draft?season=2026`);
+      if(d2?.rounds?.length){const all=[];d2.rounds.forEach((r,ri)=>{(r.picks||[]).forEach(p=>{
+        all.push({rk:p.overall||all.length+1,name:p.athlete?.displayName||"TBD",pos:p.athlete?.position?.abbreviation||"",school:p.athlete?.college?.name||"",
+          img:p.athlete?.headshot?.href||null,ht:0,wt:0,yr:"",hometown:"",rd:ri+1,grade:0,analysis:p.analysis||"",status:"",stats:[],eid:p.athlete?.id});});});
+        if(all.length){setProspects(all);setLd(false);return;}
+      }
+    }catch(e){}
+    // Hardcoded top 2026 prospects as last resort
+    const top=[
+      {rk:1,name:"Fernando Mendoza",pos:"QB",school:"Indiana",rd:1,grade:92},{rk:2,name:"Jeremiyah Love",pos:"RB",school:"Notre Dame",rd:1,grade:91},
+      {rk:3,name:"Arvell Reese",pos:"LB",school:"Ohio State",rd:1,grade:90},{rk:4,name:"David Bailey",pos:"EDGE",school:"Texas Tech",rd:1,grade:89},
+      {rk:5,name:"Sonny Styles",pos:"LB",school:"Ohio State",rd:1,grade:88},{rk:6,name:"Caleb Downs",pos:"S",school:"Ohio State",rd:1,grade:87},
+      {rk:7,name:"Carnell Tate",pos:"WR",school:"Ohio State",rd:1,grade:86},{rk:8,name:"Cam Ward",pos:"QB",school:"Miami (FL)",rd:1,grade:85},
+      {rk:9,name:"Travis Hunter",pos:"CB",school:"Colorado",rd:1,grade:94},{rk:10,name:"Abdul Carter",pos:"EDGE",school:"Penn St.",rd:1,grade:93},
+      {rk:11,name:"Will Campbell",pos:"OT",school:"LSU",rd:1,grade:88},{rk:12,name:"Tetairoa McMillan",pos:"WR",school:"Arizona",rd:1,grade:87},
+      {rk:13,name:"Mason Graham",pos:"DL",school:"Michigan",rd:1,grade:90},{rk:14,name:"Shedeur Sanders",pos:"QB",school:"Colorado",rd:1,grade:84},
+      {rk:15,name:"Tyler Warren",pos:"TE",school:"Penn St.",rd:1,grade:86},{rk:16,name:"Kelvin Banks Jr.",pos:"OT",school:"Texas",rd:1,grade:85},
+      {rk:17,name:"Mykel Williams",pos:"EDGE",school:"Georgia",rd:1,grade:84},{rk:18,name:"Luther Burden III",pos:"WR",school:"Missouri",rd:1,grade:83},
+      {rk:19,name:"James Pearce Jr.",pos:"EDGE",school:"Tennessee",rd:1,grade:82},{rk:20,name:"Emeka Egbuka",pos:"WR",school:"Ohio State",rd:1,grade:81},
+      {rk:21,name:"Benjamin Morrison",pos:"CB",school:"Notre Dame",rd:1,grade:83},{rk:22,name:"Colston Loveland",pos:"TE",school:"Michigan",rd:1,grade:80},
+      {rk:23,name:"Aireontae Ersery",pos:"OT",school:"Minnesota",rd:1,grade:80},{rk:24,name:"Jalen Milroe",pos:"QB",school:"Alabama",rd:1,grade:79},
+      {rk:25,name:"Nick Singleton",pos:"RB",school:"Penn St.",rd:1,grade:78},{rk:26,name:"Nic Scourton",pos:"EDGE",school:"Texas A&M",rd:1,grade:80},
+      {rk:27,name:"Malaki Starks",pos:"S",school:"Georgia",rd:1,grade:82},{rk:28,name:"Kenneth Grant",pos:"DL",school:"Michigan",rd:1,grade:81},
+      {rk:29,name:"Shemar Stewart",pos:"DL",school:"Texas A&M",rd:1,grade:79},{rk:30,name:"Ashton Jeanty",pos:"RB",school:"Boise State",rd:1,grade:85},
+      {rk:31,name:"Will Johnson",pos:"CB",school:"Michigan",rd:1,grade:80},{rk:32,name:"Derrick Harmon",pos:"DL",school:"Oregon",rd:1,grade:78}
+    ].map(p=>({...p,img:null,ht:0,wt:0,yr:"",hometown:"",analysis:"",status:p.rd===1?"Round 1 Lock":"",stats:[],eid:null}));
+    setProspects(top);setLd(false);
+  })();},[]);
+  const filt=prospects.filter(p=>(pos==="All"||p.pos===pos)&&(!srch||p.name.toLowerCase().includes(srch.toLowerCase())||p.school.toLowerCase().includes(srch.toLowerCase())));
+  return<div>
+    <h2 style={{fontFamily:F,fontSize:18,fontWeight:800,color:S.tx,margin:"0 0 2px"}}>📋 2026 NFL Draft Big Board</h2>
+    <p style={{fontFamily:F,fontSize:10,color:S.dm,margin:"0 0 12px"}}>{prospects.length} prospects ranked · Click name for scouting intel</p>
+    <div style={{display:"flex",gap:4,marginBottom:10,flexWrap:"wrap"}}>{["board","needs"].map(t=><Pill key={t} l={t==="board"?"📋 Big Board":"💔 Team Needs"} a={tab===t} c={S.gn} onClick={()=>setTab(t)}/>)}</div>
+    {tab==="board"?<>
+    <input value={srch} onChange={e=>setSrch(e.target.value)} placeholder="Search by name or school..." style={{width:"100%",padding:"8px 12px",background:S.sf,border:"1px solid "+S.bd,borderRadius:8,color:S.tx,fontFamily:F,fontSize:12,marginBottom:10,outline:"none",boxSizing:"border-box"}}/>
+    <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:12}}>{DRAFT_POS.map(p=><Pill key={p} l={p} a={pos===p} c={POS_COLORS[p]||S.ac} onClick={()=>setPos(p)} sm/>)}</div>
+    {ld?<Spin t="Loading prospects..."/>:filt.length===0?<Emp t="No prospects found" ic="🏈"/>:
+    <Card style={{overflow:"auto",maxHeight:700}}><table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr style={{background:S.sf}}>
+      {["RK","PLAYER","POS","SCHOOL","RD","STATUS"].map(h=><th key={h} style={{padding:"6px 8px",fontFamily:F,fontSize:9,fontWeight:700,color:S.dm,textAlign:"left",borderBottom:"1px solid "+S.bd,position:"sticky",top:0,background:S.sf}}>{h}</th>)}
+    </tr></thead><tbody>{filt.map((p,i)=><tr key={i} style={{borderBottom:"1px solid "+S.bd+"20",cursor:"pointer",transition:"background .15s"}} onClick={()=>setSel(sel===i?null:i)} onMouseEnter={e=>e.currentTarget.style.background=S.sf+"80"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+      <td style={{padding:"5px 8px"}}><span style={{fontFamily:F,fontSize:14,fontWeight:800,color:p.rk<=3?S.yl:p.rk<=10?S.ac:p.rk<=32?S.gn:S.dm}}>{p.rk}</span></td>
+      <td style={{padding:"5px 8px"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{p.img&&<img src={p.img} alt="" style={{width:28,height:28,borderRadius:6,objectFit:"cover"}} onError={e=>{e.target.style.display="none"}}/>}<span style={{fontFamily:F,fontSize:12,fontWeight:700,color:S.tx}}>{p.name}</span></div></td>
+      <td style={{padding:"5px 8px"}}><span style={{fontFamily:F,fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:4,color:"#fff",background:POS_COLORS[p.pos]||S.ac}}>{p.pos}</span></td>
+      <td style={{padding:"5px 8px",fontFamily:F,fontSize:11,color:S.sub}}>{p.school}</td>
+      <td style={{padding:"5px 8px",fontFamily:F,fontSize:14,fontWeight:800,color:p.rd===1?S.gn:p.rd<=3?S.ac:S.dm}}>{p.rd}</td>
+      <td style={{padding:"5px 8px"}}>{p.status&&<span style={{fontFamily:F,fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:4,background:S.gn+"15",color:S.gn}}>{p.status}</span>}</td>
+    </tr>)}</tbody></table></Card>}
+    {sel!==null&&filt[sel]&&<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,.7)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setSel(null)}>
+      <Card style={{maxWidth:500,width:"100%",maxHeight:"80vh",overflow:"auto"}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:16}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div><span style={{fontFamily:F,fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:4,color:"#fff",background:POS_COLORS[filt[sel].pos]||S.ac}}>{filt[sel].pos}</span>
+            {filt[sel].status&&<span style={{fontFamily:F,fontSize:10,fontWeight:600,padding:"2px 6px",borderRadius:4,background:S.gn+"15",color:S.gn,marginLeft:6}}>{filt[sel].status}</span>}
+            <h3 style={{fontFamily:F,fontSize:22,fontWeight:800,color:S.tx,margin:"8px 0 2px"}}>{filt[sel].name}</h3>
+            <p style={{fontFamily:F,fontSize:12,color:S.sub,margin:0}}>{filt[sel].school}{filt[sel].hometown?" · "+filt[sel].hometown:""}</p>
+            <p style={{fontFamily:F,fontSize:11,color:S.ac,margin:"4px 0",fontWeight:700}}>#{filt[sel].rk} Overall · Round {filt[sel].rd}</p></div>
+            <button onClick={()=>setSel(null)} style={{background:"transparent",border:"none",color:S.dm,fontSize:20,cursor:"pointer",padding:4}}>✕</button>
+          </div>
+          {filt[sel].grade>0&&<div style={{marginTop:12}}>
+            <div style={{fontFamily:F,fontSize:12,fontWeight:700,color:S.tx,marginBottom:8}}>📊 Scouting Grade</div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontFamily:F,fontSize:28,fontWeight:900,color:filt[sel].grade>=85?S.gn:filt[sel].grade>=70?S.yl:S.rd}}>{filt[sel].grade}</span>
+              <div style={{flex:1,height:8,background:S.bd,borderRadius:4,overflow:"hidden"}}><div style={{width:filt[sel].grade+"%",height:"100%",borderRadius:4,background:filt[sel].grade>=85?"linear-gradient(90deg,"+S.gn+","+S.tl+")":filt[sel].grade>=70?"linear-gradient(90deg,"+S.yl+","+S.or+")":"linear-gradient(90deg,"+S.rd+","+S.or+")"}}/></div>
+            </div>
+          </div>}
+          {filt[sel].analysis&&<div style={{marginTop:12,fontFamily:F,fontSize:11,color:S.sub,lineHeight:1.6,background:S.sf,padding:10,borderRadius:8}}>{filt[sel].analysis}</div>}
+        </div>
+      </Card>
+    </div>}
+    </>:<TeamNeeds/>}
+  </div>;
+}
+function TeamNeeds(){
+  const[ld,setLd]=useState(true);const[teams,setTeams]=useState([]);
+  useEffect(()=>{(async()=>{
+    const d=await ef(`${E.nfl}/teams?limit=32`);
+    const allT=d?.sports?.[0]?.leagues?.[0]?.teams||[];
+    const rows=allT.map(t=>({name:t.team?.displayName||"",abbr:t.team?.abbreviation||"",logo:t.team?.logos?.[0]?.href||"",color:t.team?.color?"#"+t.team.color:S.ac,id:t.team?.id}));
+    setTeams(rows);setLd(false);
+  })();},[]);
+  const needs={"LV":["QB","WR","CB"],"NYJ":["OT","EDGE","WR"],"NYG":["QB","OT","EDGE"],"NE":["WR","OT","CB"],"JAX":["WR","EDGE","DL"],"CLE":["QB","WR","OT"],"TEN":["QB","EDGE","CB"],"CAR":["OT","DL","EDGE"],"NO":["QB","WR","OT"],"CIN":["OT","DL","CB"],"CHI":["OT","WR","DL"],"SF":["DL","CB","EDGE"],"DAL":["QB","EDGE","S"],"MIA":["OT","RB","LB"],"IND":["WR","EDGE","CB"],
+    "ATL":["EDGE","DL","S"],"SEA":["OT","DL","CB"],"PIT":["WR","CB","S"],"LAC":["OT","EDGE","LB"],"ARI":["EDGE","CB","DL"],"TB":["DL","EDGE","S"],"GB":["DL","EDGE","S"],"DEN":["QB","WR","CB"],"HOU":["OT","EDGE","CB"],"DET":["CB","EDGE","DL"],"MIN":["OT","EDGE","S"],"LAR":["DL","EDGE","CB"],"BUF":["WR","DL","CB"],"BAL":["WR","CB","OT"],"PHI":["LB","S","EDGE"],"KC":["WR","EDGE","CB"],"WSH":["DL","LB","S"]};
+  return<div>{ld?<Spin/>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(280px,100%),1fr))",gap:8}}>
+    {teams.map(t=><Card key={t.abbr}><div style={{padding:"10px 12px",display:"flex",alignItems:"center",gap:10}}>
+      {t.logo&&<img src={t.logo} alt="" style={{width:32,height:32}} onError={e=>{e.target.style.display="none"}}/>}
+      <div><div style={{fontFamily:F,fontSize:12,fontWeight:700,color:S.tx}}>{t.name}</div>
+      <div style={{display:"flex",gap:4,marginTop:4}}>{(needs[t.abbr]||["TBD"]).map((n,i)=><span key={i} style={{fontFamily:F,fontSize:9,fontWeight:700,padding:"2px 5px",borderRadius:4,color:"#fff",background:POS_COLORS[n]||S.ac}}>{n}</span>)}</div></div>
+    </div></Card>)}
+  </div>}</div>;
+}
+
+// ═══ MOCK DRAFT SIMULATOR ═══
+const DRAFT_ORDER_2026=["LV","NYJ","NYG","NE","JAX","CLE","TEN","CAR","NO","CIN","CHI","SF","DAL","MIA","IND","ATL","SEA","PIT","LAC","ARI","TB","GB","DEN","HOU","DET","MIN","LAR","BUF","BAL","PHI","KC","WSH"];
+function MockDraftSim(){
+  const[myTeam,setMyTeam]=useState(null);const[picks,setPicks]=useState([]);const[currentPick,setCurrentPick]=useState(0);const[started,setStarted]=useState(false);
+  const[prospects,setProspects]=useState([]);const[ld,setLd]=useState(true);const[srch,setSrch]=useState("");const[posF,setPosF]=useState("All");
+  useEffect(()=>{(async()=>{
+    try{const d=await ef("https://site.api.espn.com/apis/site/v2/sports/football/nfl/draft/athletes?year=2026&limit=200");
+      if(d?.athletes?.length){setProspects(d.athletes.map((a,i)=>({rk:a.rank||i+1,name:a.athlete?.displayName||"TBD",pos:a.athlete?.position?.abbreviation||"",school:a.athlete?.college?.name||"",img:a.athlete?.headshot?.href||null,picked:false})));setLd(false);return;}
+    }catch(e){}
+    const top=[{rk:1,name:"Fernando Mendoza",pos:"QB",school:"Indiana"},{rk:2,name:"Jeremiyah Love",pos:"RB",school:"Notre Dame"},{rk:3,name:"Arvell Reese",pos:"LB",school:"Ohio State"},{rk:4,name:"David Bailey",pos:"EDGE",school:"Texas Tech"},{rk:5,name:"Sonny Styles",pos:"LB",school:"Ohio State"},{rk:6,name:"Caleb Downs",pos:"S",school:"Ohio State"},{rk:7,name:"Carnell Tate",pos:"WR",school:"Ohio State"},
+      {rk:8,name:"Cam Ward",pos:"QB",school:"Miami (FL)"},{rk:9,name:"Travis Hunter",pos:"CB",school:"Colorado"},{rk:10,name:"Abdul Carter",pos:"EDGE",school:"Penn St."},{rk:11,name:"Will Campbell",pos:"OT",school:"LSU"},{rk:12,name:"Tetairoa McMillan",pos:"WR",school:"Arizona"},{rk:13,name:"Mason Graham",pos:"DL",school:"Michigan"},{rk:14,name:"Shedeur Sanders",pos:"QB",school:"Colorado"},
+      {rk:15,name:"Tyler Warren",pos:"TE",school:"Penn St."},{rk:16,name:"Kelvin Banks Jr.",pos:"OT",school:"Texas"},{rk:17,name:"Mykel Williams",pos:"EDGE",school:"Georgia"},{rk:18,name:"Luther Burden III",pos:"WR",school:"Missouri"},{rk:19,name:"James Pearce Jr.",pos:"EDGE",school:"Tennessee"},{rk:20,name:"Emeka Egbuka",pos:"WR",school:"Ohio State"},
+      {rk:21,name:"Benjamin Morrison",pos:"CB",school:"Notre Dame"},{rk:22,name:"Colston Loveland",pos:"TE",school:"Michigan"},{rk:23,name:"Aireontae Ersery",pos:"OT",school:"Minnesota"},{rk:24,name:"Jalen Milroe",pos:"QB",school:"Alabama"},{rk:25,name:"Nick Singleton",pos:"RB",school:"Penn St."},{rk:26,name:"Nic Scourton",pos:"EDGE",school:"Texas A&M"},
+      {rk:27,name:"Malaki Starks",pos:"S",school:"Georgia"},{rk:28,name:"Kenneth Grant",pos:"DL",school:"Michigan"},{rk:29,name:"Shemar Stewart",pos:"DL",school:"Texas A&M"},{rk:30,name:"Ashton Jeanty",pos:"RB",school:"Boise State"},{rk:31,name:"Will Johnson",pos:"CB",school:"Michigan"},{rk:32,name:"Derrick Harmon",pos:"DL",school:"Oregon"}
+    ].map(p=>({...p,img:null,picked:false}));
+    setProspects(top);setLd(false);
+  })();},[]);
+  function makePick(prospect){
+    const team=DRAFT_ORDER_2026[currentPick];
+    const newPicks=[...picks,{pick:currentPick+1,team,player:prospect.name,pos:prospect.pos,school:prospect.school,isUser:team===myTeam}];
+    setPicks(newPicks);
+    const newP=prospects.map(p=>p.name===prospect.name?{...p,picked:true}:p);
+    setProspects(newP);
+    // Auto-sim other teams' picks
+    let nextPick=currentPick+1;
+    let simP=newP;let simPicks=newPicks;
+    while(nextPick<32&&DRAFT_ORDER_2026[nextPick]!==myTeam){
+      const available=simP.filter(p=>!p.picked);
+      if(!available.length)break;
+      // Simple AI: pick highest ranked available, with slight position need randomness
+      const pick=available[Math.min(Math.floor(Math.random()*3),available.length-1)];
+      simPicks=[...simPicks,{pick:nextPick+1,team:DRAFT_ORDER_2026[nextPick],player:pick.name,pos:pick.pos,school:pick.school,isUser:false}];
+      simP=simP.map(p=>p.name===pick.name?{...p,picked:true}:p);
+      nextPick++;
+    }
+    setPicks(simPicks);setProspects(simP);setCurrentPick(nextPick);
+  }
+  if(!myTeam)return<div>
+    <h2 style={{fontFamily:F,fontSize:18,fontWeight:800,color:S.tx,margin:"0 0 4px"}}>🎮 Mock Draft Simulator</h2>
+    <p style={{fontFamily:F,fontSize:11,color:S.dm,margin:"0 0 14px"}}>Pick your team, then draft Round 1</p>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:6}}>
+      {DRAFT_ORDER_2026.map((t,i)=>{const tm=NFL.find(x=>x.a===t);return<Card key={t} hover onClick={()=>setMyTeam(t)} style={{cursor:"pointer"}}>
+        <div style={{padding:"8px 10px",display:"flex",alignItems:"center",gap:8}}>
+          <img src={nL(t)} alt="" style={{width:28,height:28}} onError={e=>{e.target.style.display="none"}}/>
+          <div><div style={{fontFamily:F,fontSize:11,fontWeight:700,color:S.tx}}>{tm?.f||t}</div><div style={{fontFamily:F,fontSize:9,color:S.ac}}>Pick #{i+1}</div></div>
+        </div></Card>;})}
+    </div>
+  </div>;
+  const available=prospects.filter(p=>!p.picked&&(posF==="All"||p.pos===posF)&&(!srch||p.name.toLowerCase().includes(srch.toLowerCase())));
+  const isMyPick=currentPick<32&&DRAFT_ORDER_2026[currentPick]===myTeam;
+  const draftDone=currentPick>=32;
+  return<div>
+    <h2 style={{fontFamily:F,fontSize:18,fontWeight:800,color:S.tx,margin:"0 0 4px"}}>🎮 Mock Draft — {NFL.find(x=>x.a===myTeam)?.f||myTeam}</h2>
+    <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
+      <span style={{fontFamily:F,fontSize:11,color:S.dm}}>{picks.length}/32 picks</span>
+      {!draftDone&&<span style={{fontFamily:F,fontSize:11,fontWeight:700,color:isMyPick?S.gn:S.yl}}>Pick #{currentPick+1} · {DRAFT_ORDER_2026[currentPick]} {isMyPick?"— YOUR PICK!":"(simming...)"}</span>}
+      <button onClick={()=>{setMyTeam(null);setPicks([]);setCurrentPick(0);setProspects(p=>p.map(x=>({...x,picked:false})));}} style={{marginLeft:"auto",fontFamily:F,fontSize:10,fontWeight:600,padding:"4px 10px",background:S.rd+"15",border:"1px solid "+S.rd+"30",color:S.rd,borderRadius:6,cursor:"pointer"}}>Reset Draft</button>
+    </div>
+    {/* Draft results */}
+    {picks.length>0&&<Card style={{marginBottom:12,overflow:"auto",maxHeight:200}}><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>
+      {picks.map(p=><tr key={p.pick} style={{borderBottom:"1px solid "+S.bd+"20",background:p.isUser?S.gn+"0a":"transparent"}}>
+        <td style={{padding:"4px 8px",fontFamily:F,fontSize:12,fontWeight:800,color:S.ac,width:30}}>#{p.pick}</td>
+        <td style={{padding:"4px 8px"}}><img src={nL(p.team)} alt="" style={{width:18,height:18}} onError={e=>{e.target.style.display="none"}}/></td>
+        <td style={{padding:"4px 8px",fontFamily:F,fontSize:11,fontWeight:700,color:S.tx}}>{p.team}</td>
+        <td style={{padding:"4px 8px",fontFamily:F,fontSize:11,fontWeight:600,color:p.isUser?S.gn:S.sub}}>{p.player}</td>
+        <td style={{padding:"4px 8px"}}><span style={{fontFamily:F,fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,color:"#fff",background:POS_COLORS[p.pos]||S.ac}}>{p.pos}</span></td>
+      </tr>)}
+    </tbody></table></Card>}
+    {/* Available prospects */}
+    {isMyPick&&!draftDone&&<>
+      <div style={{fontFamily:F,fontSize:13,fontWeight:800,color:S.gn,marginBottom:8}}>🟢 ON THE CLOCK — Select your pick:</div>
+      <input value={srch} onChange={e=>setSrch(e.target.value)} placeholder="Search players..." style={{width:"100%",padding:"6px 10px",background:S.sf,border:"1px solid "+S.bd,borderRadius:6,color:S.tx,fontFamily:F,fontSize:11,marginBottom:8,outline:"none",boxSizing:"border-box"}}/>
+      <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:10}}>{DRAFT_POS.map(p=><Pill key={p} l={p} a={posF===p} c={POS_COLORS[p]||S.ac} onClick={()=>setPosF(p)} sm/>)}</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(260px,100%),1fr))",gap:6}}>
+        {available.slice(0,20).map(p=><Card key={p.rk} hover onClick={()=>makePick(p)} style={{cursor:"pointer"}}>
+          <div style={{padding:"8px 10px",display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontFamily:F,fontSize:14,fontWeight:800,color:S.ac,minWidth:20}}>#{p.rk}</span>
+            <div style={{flex:1}}><div style={{fontFamily:F,fontSize:12,fontWeight:700,color:S.tx}}>{p.name}</div><div style={{fontFamily:F,fontSize:10,color:S.dm}}>{p.school}</div></div>
+            <span style={{fontFamily:F,fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:4,color:"#fff",background:POS_COLORS[p.pos]||S.ac}}>{p.pos}</span>
+          </div></Card>)}
+      </div>
+    </>}
+    {draftDone&&<div style={{textAlign:"center",padding:20}}>
+      <div style={{fontFamily:F,fontSize:24,fontWeight:900,color:S.gn,marginBottom:8}}>🏈 Draft Complete!</div>
+      <div style={{fontFamily:F,fontSize:12,color:S.dm}}>Your picks are highlighted in green above</div>
+    </div>}
+  </div>;
+}
+
+// ═══ FREE AGENT TRACKER ═══
+function FreeAgentTracker(){
+  const[players,setPlayers]=useState([]);const[ld,setLd]=useState(true);const[posF,setPosF]=useState("All");const[srch,setSrch]=useState("");const[tab,setTab]=useState("fa");
+  useEffect(()=>{(async()=>{
+    try{
+      const d=await ef(`${E.nfl}/teams?limit=32`);const allT=d?.sports?.[0]?.leagues?.[0]?.teams||[];
+      // Get transactions/free agents from ESPN
+      const txn=await ef("https://site.api.espn.com/apis/site/v2/sports/football/nfl/transactions?limit=100");
+      if(txn?.items?.length){
+        const fas=txn.items.filter(t=>(t.description||"").toLowerCase().includes("free agent")||(t.description||"").toLowerCase().includes("signed")||(t.description||"").toLowerCase().includes("released")).map((t,i)=>({
+          id:i,name:t.athlete?.displayName||"Unknown",pos:t.athlete?.position?.abbreviation||"",team:t.team?.abbreviation||"FA",teamLogo:t.team?.logo||"",
+          status:(t.description||"").toLowerCase().includes("signed")?"Signed":(t.description||"").toLowerCase().includes("released")?"Released":"Available",
+          desc:t.description||"",date:t.date?fd(t.date):""}));
+        if(fas.length){setPlayers(fas);setLd(false);return;}
+      }
+    }catch(e){}
+    // Fallback: notable 2026 free agents
+    const notable=[
+      {name:"Alec Pierce",pos:"WR",team:"IND",status:"Available",tier:"Starter"},{name:"Jalen Redmond",pos:"IDL",team:"MIN",status:"Available",tier:"Solid Starter"},
+      {name:"Tyler Linderbaum",pos:"OL",team:"BAL",status:"Available",tier:"Solid Starter"},{name:"George Pickens",pos:"WR",team:"DAL",status:"Franchise Tag",tier:"Elite"},
+      {name:"Kendrick Bourne",pos:"WR",team:"SF",status:"Available",tier:"Prove It"},{name:"Jaylen Watson",pos:"CB",team:"KC",status:"Available",tier:"Starter"},
+      {name:"Tee Higgins",pos:"WR",team:"FA",status:"Available",tier:"Elite"},{name:"Saquon Barkley",pos:"RB",team:"PHI",status:"Signed",tier:"Elite"},
+      {name:"Josh Jacobs",pos:"RB",team:"GB",status:"Signed",tier:"Solid Starter"},{name:"Derrick Henry",pos:"RB",team:"BAL",status:"Signed",tier:"Elite"},
+      {name:"Mike Evans",pos:"WR",team:"TB",status:"Signed",tier:"Elite"},{name:"Chris Godwin",pos:"WR",team:"FA",status:"Available",tier:"Solid Starter"}
+    ].map((p,i)=>({...p,id:i,teamLogo:"",desc:"",date:"2026 Free Agent"}));
+    setPlayers(notable);setLd(false);
+  })();},[]);
+  const posFilters=["All","QB","RB","WR","TE","OL","EDGE","IDL","DL","LB","CB","S"];
+  const filt=players.filter(p=>(posF==="All"||p.pos===posF)&&(!srch||p.name.toLowerCase().includes(srch.toLowerCase())));
+  const statusColor={Available:S.gn,Signed:S.ac,"Franchise Tag":S.yl,Released:S.rd};
+  return<div>
+    <h2 style={{fontFamily:F,fontSize:18,fontWeight:800,color:S.tx,margin:"0 0 4px"}}>💰 2026 Free Agents</h2>
+    <p style={{fontFamily:F,fontSize:10,color:S.dm,margin:"0 0 12px"}}>Contract intel and player movement</p>
+    <div style={{display:"flex",gap:4,marginBottom:10}}>{["fa","moves"].map(t=><Pill key={t} l={t==="fa"?"🏈 Free Agents":"📋 Transactions"} a={tab===t} c={S.yl} onClick={()=>setTab(t)}/>)}</div>
+    <input value={srch} onChange={e=>setSrch(e.target.value)} placeholder="Search players..." style={{width:"100%",padding:"8px 12px",background:S.sf,border:"1px solid "+S.bd,borderRadius:8,color:S.tx,fontFamily:F,fontSize:12,marginBottom:10,outline:"none",boxSizing:"border-box"}}/>
+    <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:12}}>{posFilters.map(p=><Pill key={p} l={p} a={posF===p} c={POS_COLORS[p]||S.ac} onClick={()=>setPosF(p)} sm/>)}</div>
+    {ld?<Spin t="Loading free agents..."/>:filt.length===0?<Emp t="No players found" ic="💰"/>:
+    <Card style={{overflow:"auto",maxHeight:600}}><table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr style={{background:S.sf}}>
+      {["#","PLAYER","POS","TEAM","STATUS","INFO"].map(h=><th key={h} style={{padding:"6px 8px",fontFamily:F,fontSize:9,fontWeight:700,color:S.dm,textAlign:"left",borderBottom:"1px solid "+S.bd,position:"sticky",top:0,background:S.sf}}>{h}</th>)}
+    </tr></thead><tbody>{filt.map((p,i)=><tr key={p.id} style={{borderBottom:"1px solid "+S.bd+"20"}}>
+      <td style={{padding:"5px 8px",fontFamily:F,fontSize:11,color:S.dm}}>{i+1}</td>
+      <td style={{padding:"5px 8px",fontFamily:F,fontSize:12,fontWeight:700,color:S.tx}}>{p.name}</td>
+      <td style={{padding:"5px 8px"}}><span style={{fontFamily:F,fontSize:9,fontWeight:700,padding:"2px 5px",borderRadius:3,color:"#fff",background:POS_COLORS[p.pos]||S.ac}}>{p.pos}</span></td>
+      <td style={{padding:"5px 8px",fontFamily:F,fontSize:11,fontWeight:600,color:S.sub}}>{p.team}</td>
+      <td style={{padding:"5px 8px"}}><span style={{fontFamily:F,fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:4,background:(statusColor[p.status]||S.dm)+"15",color:statusColor[p.status]||S.dm}}>{p.status}</span></td>
+      <td style={{padding:"5px 8px",fontFamily:F,fontSize:10,color:S.dm,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.desc||p.date||p.tier||""}</td>
+    </tr>)}</tbody></table></Card>}
+  </div>;
+}
+
+// ═══ PROPS LAB — Player Prop Research & Analysis ═══
+function PropsLab(){
+  const[sport,setSport]=useState("nba");const[games,setGames]=useState([]);const[selGame,setSelGame]=useState(null);const[props,setProps]=useState([]);const[ld,setLd]=useState(true);const[ldP,setLdP]=useState(false);const[sel,setSel]=useState(null);
+  const spKey={nba:"basketball_nba",nfl:"americanfootball_nfl",mlb:"baseball_mlb",nhl:"icehockey_nhl"};
+  const propMkts={nba:"player_points,player_rebounds,player_assists,player_threes",nfl:"player_pass_tds,player_pass_yds,player_rush_yds,player_reception_yds",mlb:"batter_total_bases,batter_hits,pitcher_strikeouts",nhl:"player_points,player_shots_on_goal"};
+  // Fetch today's games
+  useEffect(()=>{setLd(true);setGames([]);setProps([]);setSel(null);setSelGame(null);
+    fetch(`https://api.the-odds-api.com/v4/sports/${spKey[sport]}/events?apiKey=${OK}&dateFormat=iso`).then(r=>r.ok?r.json():[]).then(d=>{setGames((d||[]).slice(0,20));setLd(false);}).catch(()=>setLd(false));
+  },[sport]);
+  // Fetch props for selected game
+  function loadProps(game){
+    setSelGame(game);setLdP(true);setProps([]);setSel(null);
+    fetch(`https://api.the-odds-api.com/v4/sports/${spKey[sport]}/events/${game.id}/odds?apiKey=${OK}&regions=us&markets=${propMkts[sport]}&oddsFormat=american`).then(r=>r.ok?r.json():{}).then(d=>{
+      const allProps=[];
+      (d.bookmakers||[]).forEach(bk=>{(bk.markets||[]).forEach(mkt=>{(mkt.outcomes||[]).forEach(o=>{
+        const existing=allProps.find(x=>x.player===o.name&&x.market===mkt.key&&x.line===o.point);
+        if(existing){if(!existing.books.find(b=>b.book===bk.title))existing.books.push({book:bk.title,price:o.price,point:o.point});}
+        else{allProps.push({player:o.name,market:mkt.key,type:o.name?.includes("Over")?"Over":o.description||"Over",line:o.point,books:[{book:bk.title,price:o.price,point:o.point}]});}
+      });});});
+      // Group by player
+      const grouped={};allProps.forEach(p=>{const key=p.player+"|"+p.market+"|"+p.line;if(!grouped[key])grouped[key]=p;else{p.books.forEach(b=>{if(!grouped[key].books.find(x=>x.book===b.book))grouped[key].books.push(b);});}});
+      setProps(Object.values(grouped));setLdP(false);
+    }).catch(()=>setLdP(false));
+  }
+  const mktLabel={player_points:"PTS",player_rebounds:"REB",player_assists:"AST",player_threes:"3PM",player_pass_tds:"PASS TD",player_pass_yds:"PASS YDS",player_rush_yds:"RUSH YDS",player_reception_yds:"REC YDS",batter_total_bases:"BASES",batter_hits:"HITS",pitcher_strikeouts:"K",player_shots_on_goal:"SOG"};
+  return<div>
+    <h2 style={{fontFamily:F,fontSize:18,fontWeight:800,color:S.tx,margin:"0 0 4px"}}>🔬 Props Lab</h2>
+    <p style={{fontFamily:F,fontSize:10,color:S.dm,margin:"0 0 12px"}}>Player prop research · Line comparison across books · Click a game then explore props</p>
+    <div style={{display:"flex",gap:4,marginBottom:12}}>{[["nba","🏀 NBA"],["nfl","🏈 NFL"],["mlb","⚾ MLB"],["nhl","🏒 NHL"]].map(([k,l])=><Pill key={k} l={l} a={sport===k} c={S.yl} onClick={()=>setSport(k)}/>)}</div>
+    {/* Game selection */}
+    {ld?<Spin t="Loading games..."/>:<>
+    <div style={{fontFamily:F,fontSize:11,fontWeight:700,color:S.sub,marginBottom:6}}>Select a game:</div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(220px,100%),1fr))",gap:6,marginBottom:14}}>
+      {games.map(g=><Card key={g.id} hover onClick={()=>loadProps(g)} style={{cursor:"pointer",border:selGame?.id===g.id?"2px solid "+S.yl:"2px solid transparent"}}>
+        <div style={{padding:"8px 10px"}}>
+          <div style={{fontFamily:F,fontSize:11,fontWeight:700,color:S.tx}}>{(g.away_team||"").split(" ").pop()} @ {(g.home_team||"").split(" ").pop()}</div>
+          <div style={{fontFamily:F,fontSize:9,color:S.dm}}>{new Date(g.commence_time).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
+        </div></Card>)}
+    </div></>}
+    {/* Props for selected game */}
+    {selGame&&(ldP?<Spin t="Loading player props..."/>:props.length===0?<Emp t="No props available for this game yet" ic="🔬"/>:<>
+      <div style={{fontFamily:F,fontSize:13,fontWeight:800,color:S.yl,marginBottom:8}}>{(selGame.away_team||"").split(" ").pop()} @ {(selGame.home_team||"").split(" ").pop()} — Player Props</div>
+      <Card style={{overflow:"auto",maxHeight:600}}><table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr style={{background:S.sf}}>
+        {["PLAYER","PROP","LINE","BEST ODDS","BOOKS"].map(h=><th key={h} style={{padding:"6px 8px",fontFamily:F,fontSize:9,fontWeight:700,color:S.dm,textAlign:"left",borderBottom:"1px solid "+S.bd,position:"sticky",top:0,background:S.sf}}>{h}</th>)}
+      </tr></thead><tbody>{props.map((p,i)=>{
+        const bestBook=p.books.reduce((best,b)=>b.price>best.price?b:best,p.books[0]);
+        return<tr key={i} style={{borderBottom:"1px solid "+S.bd+"20",cursor:"pointer",background:sel===i?S.yl+"08":"transparent"}} onClick={()=>setSel(sel===i?null:i)}>
+          <td style={{padding:"5px 8px",fontFamily:F,fontSize:12,fontWeight:700,color:S.tx}}>{p.player}</td>
+          <td style={{padding:"5px 8px"}}><span style={{fontFamily:F,fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4,background:S.ac+"15",color:S.ac}}>{mktLabel[p.market]||p.market}</span></td>
+          <td style={{padding:"5px 8px",fontFamily:F,fontSize:14,fontWeight:800,color:S.yl}}>{p.line}</td>
+          <td style={{padding:"5px 8px",fontFamily:F,fontSize:13,fontWeight:700,color:bestBook.price>0?S.gn:S.rd}}>{fo(bestBook.price)}</td>
+          <td style={{padding:"5px 8px"}}><div style={{display:"flex",gap:3,flexWrap:"wrap"}}>{p.books.map((b,bi)=><span key={bi} style={{fontFamily:F,fontSize:8,padding:"1px 4px",borderRadius:3,background:S.sf,color:b.price===bestBook.price?S.gn:S.dm,border:"1px solid "+(b.price===bestBook.price?S.gn+"40":S.bd)}}>{b.book.replace("FanDuel","FD").replace("DraftKings","DK").replace("BetMGM","MGM").replace("Caesars","CZR")} {fo(b.price)}</span>)}</div></td>
+        </tr>;})}
+      </tbody></table></Card>
+      {sel!==null&&props[sel]&&<Card style={{marginTop:10,padding:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+          <div><div style={{fontFamily:F,fontSize:16,fontWeight:800,color:S.tx}}>{props[sel].player}</div>
+          <div style={{fontFamily:F,fontSize:12,color:S.yl,fontWeight:700,marginTop:2}}>o{props[sel].line} {mktLabel[props[sel].market]||props[sel].market}</div></div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:8,marginTop:12}}>
+          {props[sel].books.map((b,i)=><div key={i} style={{background:S.sf,borderRadius:8,padding:"8px 10px",border:"1px solid "+S.bd}}>
+            <div style={{fontFamily:F,fontSize:9,color:S.dm,fontWeight:600}}>{b.book}</div>
+            <div style={{fontFamily:F,fontSize:18,fontWeight:800,color:b.price>0?S.gn:S.rd,marginTop:2}}>{fo(b.price)}</div>
+            <div style={{fontFamily:F,fontSize:9,color:S.dm}}>Line: {b.point||props[sel].line}</div>
+          </div>)}
+        </div>
+        <button onClick={()=>addBet((selGame.away_team||"").split(" ").pop()+" @ "+(selGame.home_team||"").split(" ").pop(),props[sel].player+" o"+props[sel].line+" "+(mktLabel[props[sel].market]||""),"prop",props[sel].books[0]?.price||-110)} style={{marginTop:12,width:"100%",padding:"10px",background:S.gn,border:"none",borderRadius:8,fontFamily:F,fontSize:12,fontWeight:700,color:"#fff",cursor:"pointer"}}>+ Add to Bet Tracker</button>
+      </Card>}
+    </>)}
+  </div>;
+}
+
 // ═══ SPORTSBOOK PROMOS — monetization ═══
 function Promos(){
   const books=[
@@ -1551,7 +1873,7 @@ export default function App(){
   const toggleTheme=()=>{const n=theme==="dark"?"light":"dark";setTheme(n);window._ghqTheme=n;};
   Object.assign(S, theme==="dark"?SD:SL);
   const sportTabs={
-    NFL:[{id:"sc",i:"🏈",l:"Scores"},{id:"st",i:"📊",l:"Standings"},{id:"ro",i:"👥",l:"Rosters"},{id:"stat",i:"📈",l:"Stats"},{id:"tp",i:"🏟",l:"Teams"},{id:"h2h",i:"⚔️",l:"H2H"},{id:"ndr",i:"📝",l:"Draft"}],
+    NFL:[{id:"sc",i:"🏈",l:"Scores"},{id:"st",i:"📊",l:"Standings"},{id:"ro",i:"👥",l:"Rosters"},{id:"stat",i:"📈",l:"Stats"},{id:"tp",i:"🏟",l:"Teams"},{id:"h2h",i:"⚔️",l:"H2H"},{id:"ndr",i:"📝",l:"Draft"},{id:"nbb",i:"📋",l:"Big Board"},{id:"nmk",i:"🎮",l:"Mock Draft"},{id:"nfa",i:"💰",l:"Free Agents"},{id:"npr",i:"🔬",l:"Props Lab"}],
     NBA:[{id:"nbsc",i:"🏀",l:"Scores"},{id:"nbst",i:"📊",l:"Standings"},{id:"nbro",i:"👥",l:"Rosters"},{id:"nbsa",i:"📈",l:"Stats"},{id:"nbh2h",i:"⚔️",l:"H2H"}],
     MLB:[{id:"mlsc",i:"⚾",l:"Scores"},{id:"mlst",i:"📊",l:"Standings"},{id:"mlro",i:"👥",l:"Rosters"},{id:"mlsa",i:"📈",l:"Stats"},{id:"mlh2h",i:"⚔️",l:"H2H"}],
     NHL:[{id:"hlsc",i:"🏒",l:"Scores"},{id:"hlst",i:"📊",l:"Standings"},{id:"hlro",i:"👥",l:"Rosters"},{id:"hlsa",i:"📈",l:"Stats"},{id:"hlh2h",i:"⚔️",l:"H2H"}],
@@ -1559,7 +1881,7 @@ export default function App(){
     CBB:[{id:"bmm",i:"🏆",l:"Bracket"},{id:"bpk",i:"🎯",l:"Picks"},{id:"bms",i:"📺",l:"Tourney"},{id:"bsc",i:"🏀",l:"Scores"},{id:"brk",i:"🏆",l:"Rankings"},{id:"bro",i:"📋",l:"Rosters"},{id:"bst",i:"📈",l:"Stats"}],
     LAX:[{id:"lxsc",i:"🥍",l:"Scores"},{id:"lxro",i:"📋",l:"Teams"}],
     FAN:[{id:"fan",i:"⚡",l:"Fantasy"},{id:"trn",i:"🔥",l:"Waivers"},{id:"drft",i:"📋",l:"Draft"},{id:"trd",i:"⚖️",l:"Trade"},{id:"cmp",i:"🔄",l:"Compare"}],
-    ODDS:[{id:"bet",i:"💰",l:"Betting"},{id:"par",i:"🎯",l:"Parlay"},{id:"prop",i:"🎲",l:"Props"},{id:"ocp",i:"📊",l:"Compare"}],
+    ODDS:[{id:"bet",i:"💰",l:"Betting"},{id:"par",i:"🎯",l:"Parlay"},{id:"prop",i:"🎲",l:"Props"},{id:"ocp",i:"📊",l:"Compare"},{id:"npr",i:"🔬",l:"Props Lab"}],
     MORE:[{id:"inj",i:"🏥",l:"Injuries"},{id:"nw",i:"📰",l:"News"},{id:"promo",i:"🎁",l:"Promos"}]
   };
   const sportIcons={NFL:"🏈",NBA:"🏀",MLB:"⚾",NHL:"🏒",CFB:"🏈",CBB:"🏀",LAX:"🥍",FAN:"⚡",ODDS:"💰",MORE:"📰"};
@@ -1637,6 +1959,10 @@ export default function App(){
       {sub==="hlro"&&<Rosters title="NHL Rosters" teams={NHL} sport="nhl" nf="f" cf="cl" lf={t=>nhL(t.eid)}/>}
       {sub==="hlsa"&&<Stats sport="nhl" title="NHL Stat Leaders" color={S.tl}/>}
       {sub==="ndr"&&<NFLDraft/>}
+      {sub==="nbb"&&<BigBoard/>}
+      {sub==="nmk"&&<MockDraftSim/>}
+      {sub==="nfa"&&<FreeAgentTracker/>}
+      {sub==="npr"&&<PropsLab/>}
       {sub==="nbh2h"&&<H2H/>}
       {sub==="mlh2h"&&<H2H/>}
       {sub==="hlh2h"&&<H2H/>}
