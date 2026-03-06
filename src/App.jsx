@@ -1292,45 +1292,54 @@ function usePicks(){
   useEffect(()=>{const i=setInterval(()=>{if(window._ghqPicksV!==vRef.current){vRef.current=window._ghqPicksV;sP({...window._ghqPicks});}},300);return()=>clearInterval(i);},[]);
   return[p,upd];
 }
+// Shared: parse one ESPN tournament event into a game object
+function parseMM(ev){
+  const comp=ev.competitions?.[0];if(!comp)return null;
+  const t1=comp.competitors?.[0];const t2=comp.competitors?.[1];
+  const notes=(comp.notes||ev.competitions?.[0]?.notes||[]).map(n=>n.headline||"").join(" ");
+  const status=comp.status?.type?.description||"";
+  const clock=comp.status?.displayClock||"";
+  const period=comp.status?.period||0;
+  let rnd="";
+  if(/first four/i.test(notes))rnd="First Four";
+  else if(/round of 64|first round/i.test(notes))rnd="Round of 64";
+  else if(/round of 32|second round/i.test(notes))rnd="Round of 32";
+  else if(/sweet 16|sweet sixteen/i.test(notes))rnd="Sweet 16";
+  else if(/elite 8|elite eight/i.test(notes))rnd="Elite 8";
+  else if(/final four/i.test(notes))rnd="Final Four";
+  else if(/championship|national championship/i.test(notes))rnd="Championship";
+  let reg="";
+  if(/east region/i.test(notes))reg="East";
+  else if(/west region/i.test(notes))reg="West";
+  else if(/south region/i.test(notes))reg="South";
+  else if(/midwest region/i.test(notes))reg="Midwest";
+  const mkT=(t)=>{const sd=t?.curatedRank?.current;return{name:t?.team?.shortDisplayName||t?.team?.displayName||"TBD",abbr:t?.team?.abbreviation||"",seed:(sd&&sd<17)?sd:0,score:parseInt(t?.score)||0,eid:t?.team?.id||0,winner:t?.winner||false,logo:t?.team?.logo||cL(t?.team?.id)};};
+  const home=mkT(t1);const away=mkT(t2);
+  const isUpset=status==="Final"&&((home.winner&&home.seed>away.seed&&away.seed>0)||(away.winner&&away.seed>home.seed&&home.seed>0));
+  return{id:ev.id,date:ev.date,rnd,reg,home,away,status,clock,period,notes,isUpset};
+}
+// Shared: fetch tournament games, skip years where all teams are TBD
+async function fetchMMGames(){
+  for(const yr of[2026,2025]){
+    const d=await ef(`${E.cbb}/scoreboard?dates=${yr}0301-${yr}0410&groups=100&limit=300`);
+    if(!d?.events?.length)continue;
+    const games=d.events.map(parseMM).filter(Boolean);
+    const allTBD=games.every(g=>g.home.name==="TBD"&&g.away.name==="TBD");
+    if(allTBD)continue;
+    games.sort((a,b)=>new Date(a.date)-new Date(b.date));
+    return{games,yr};
+  }
+  return{games:[],yr:2026};
+}
 
 function MarchMadness(){
-  const[games,setGames]=useState([]);const[ld,setLd]=useState(true);const[round,setRound]=useState("ALL");const[region,setRegion]=useState("ALL");
+  const[games,setGames]=useState([]);const[yr,setYr]=useState(2026);const[ld,setLd]=useState(true);const[round,setRound]=useState("ALL");const[region,setRegion]=useState("ALL");
   const ROUNDS=["ALL","First Four","Round of 64","Round of 32","Sweet 16","Elite 8","Final Four","Championship"];
   const REGIONS=["ALL","East","West","South","Midwest"];
   useEffect(()=>{(async()=>{
     setLd(true);
-    const all=[];
-    // Fetch NCAA tournament games from ESPN — groups=100 is NCAA tournament
-    for(const yr of[2026,2025]){
-      const d=await ef(`${E.cbb}/scoreboard?dates=${yr}0301-${yr}0410&groups=100&limit=300`);
-      if(d?.events?.length>0){(d.events||[]).forEach(ev=>{
-        const comp=ev.competitions?.[0];if(!comp)return;
-        const t1=comp.competitors?.[0];const t2=comp.competitors?.[1];
-        const notes=(ev.competitions?.[0]?.notes||[]).map(n=>n.headline||"").join(" ");
-        const status=comp.status?.type?.description||"";
-        const clock=comp.status?.displayClock||"";
-        const period=comp.status?.period||0;
-        let rnd="";
-        if(/first four/i.test(notes))rnd="First Four";
-        else if(/round of 64|first round/i.test(notes))rnd="Round of 64";
-        else if(/round of 32|second round/i.test(notes))rnd="Round of 32";
-        else if(/sweet 16|sweet sixteen/i.test(notes))rnd="Sweet 16";
-        else if(/elite 8|elite eight/i.test(notes))rnd="Elite 8";
-        else if(/final four/i.test(notes))rnd="Final Four";
-        else if(/championship|national championship/i.test(notes))rnd="Championship";
-        let reg="";
-        if(/east/i.test(notes))reg="East";
-        else if(/west/i.test(notes))reg="West";
-        else if(/south/i.test(notes))reg="South";
-        else if(/midwest/i.test(notes))reg="Midwest";
-        const home={name:t1?.team?.shortDisplayName||t1?.team?.displayName||"TBD",abbr:t1?.team?.abbreviation||"",seed:t1?.curatedRank?.current||parseInt((notes.match(/\((\d+)\)/)||[])[1])||0,score:parseInt(t1?.score)||0,eid:t1?.team?.id||0,winner:t1?.winner||false,logo:t1?.team?.logo||cL(t1?.team?.id)};
-        const away={name:t2?.team?.shortDisplayName||t2?.team?.displayName||"TBD",abbr:t2?.team?.abbreviation||"",seed:t2?.curatedRank?.current||0,score:parseInt(t2?.score)||0,eid:t2?.team?.id||0,winner:t2?.winner||false,logo:t2?.team?.logo||cL(t2?.team?.id)};
-        const isUpset=status==="Final"&&((home.winner&&home.seed>away.seed&&away.seed>0)||(away.winner&&away.seed>home.seed&&home.seed>0));
-        all.push({id:ev.id,date:ev.date,rnd,reg,home,away,status,clock,period,notes,isUpset,yr});
-      });break;}
-    }
-    all.sort((a,b)=>new Date(a.date)-new Date(b.date));
-    setGames(all);setLd(false);
+    const{games:g,yr:y}=await fetchMMGames();
+    setGames(g);setYr(y);setLd(false);
   })();},[]);
   const fg=games.filter(g=>(round==="ALL"||g.rnd===round)&&(region==="ALL"||g.reg===region));
   const upsets=games.filter(g=>g.isUpset);
@@ -1338,7 +1347,7 @@ function MarchMadness(){
   if(!games.length)return<Emp t="No tournament games found yet. Check back when the bracket is released!" ic="🏀"/>;
   return<div>
     <div style={{fontFamily:F,fontSize:18,fontWeight:900,color:S.or,marginBottom:4}}>🏆 March Madness</div>
-    <div style={{fontFamily:F,fontSize:11,color:S.dm,marginBottom:12}}>NCAA Tournament Bracket</div>
+    <div style={{fontFamily:F,fontSize:11,color:S.dm,marginBottom:12}}>NCAA Tournament Bracket{yr<2026?" — "+yr+" Tournament":""}</div>
     {upsets.length>0&&<Card style={{padding:10,marginBottom:12,border:"1px solid "+S.or+"30"}}>
       <div style={{fontFamily:F,fontSize:11,fontWeight:800,color:S.or,marginBottom:6}}>🚨 UPSET ALERTS</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
@@ -1374,7 +1383,7 @@ function MarchMadness(){
             </div>
           </div>
           {[g.away,g.home].map((t,i)=><div key={i} style={{display:"flex",alignItems:"center",padding:"6px 10px",gap:8,background:t.winner?S.gn+"08":"transparent"}}>
-            {t.seed>0&&<span style={{fontFamily:F,fontSize:10,fontWeight:800,color:t.seed<=4?S.or:t.seed<=8?S.ac:S.dm,width:18,textAlign:"center"}}>{t.seed}</span>}
+            {t.seed>0&&t.seed<17&&<span style={{fontFamily:F,fontSize:10,fontWeight:800,color:t.seed<=4?S.or:t.seed<=8?S.ac:S.dm,width:18,textAlign:"center"}}>{t.seed}</span>}
             <img src={t.logo||cL(t.eid)} alt="" style={{width:22,height:22,objectFit:"contain"}} onError={e=>{e.target.style.display="none"}}/>
             <span style={{fontFamily:F,fontSize:12,fontWeight:t.winner?800:500,color:t.winner?S.tx:done?S.dm:S.tx,flex:1}}>{t.name}</span>
             {(done||live)&&<span style={{fontFamily:F,fontSize:14,fontWeight:800,color:t.winner?S.gn:S.dm}}>{t.score}</span>}
@@ -1389,32 +1398,12 @@ function MarchMadness(){
 
 function MarchPicks(){
   const[picks,setPick]=usePicks();
-  const[games,setGames]=useState([]);const[ld,setLd]=useState(true);const[round,setRound]=useState("ALL");
-  const ROUNDS=["ALL","Round of 64","Round of 32","Sweet 16","Elite 8","Final Four","Championship"];
+  const[games,setGames]=useState([]);const[yr,setYr]=useState(2026);const[ld,setLd]=useState(true);const[round,setRound]=useState("ALL");
+  const ROUNDS=["ALL","First Four","Round of 64","Round of 32","Sweet 16","Elite 8","Final Four","Championship"];
   useEffect(()=>{(async()=>{
-    setLd(true);const all=[];
-    for(const yr of[2026,2025]){
-      const d=await ef(`${E.cbb}/scoreboard?dates=${yr}0301-${yr}0410&groups=100&limit=300`);
-      if(d?.events?.length>0){(d.events||[]).forEach(ev=>{
-        const comp=ev.competitions?.[0];if(!comp)return;
-        const t1=comp.competitors?.[0];const t2=comp.competitors?.[1];
-        const notes=(comp.notes||[]).map(n=>n.headline||"").join(" ");
-        const status=comp.status?.type?.description||"";
-        let rnd="";
-        if(/round of 64|first round/i.test(notes))rnd="Round of 64";
-        else if(/round of 32|second round/i.test(notes))rnd="Round of 32";
-        else if(/sweet 16/i.test(notes))rnd="Sweet 16";
-        else if(/elite 8/i.test(notes))rnd="Elite 8";
-        else if(/final four/i.test(notes))rnd="Final Four";
-        else if(/championship/i.test(notes))rnd="Championship";
-        else rnd="Round of 64";
-        const home={name:t1?.team?.shortDisplayName||"TBD",seed:t1?.curatedRank?.current||0,eid:t1?.team?.id||0,winner:t1?.winner||false,logo:t1?.team?.logo||cL(t1?.team?.id)};
-        const away={name:t2?.team?.shortDisplayName||"TBD",seed:t2?.curatedRank?.current||0,eid:t2?.team?.id||0,winner:t2?.winner||false,logo:t2?.team?.logo||cL(t2?.team?.id)};
-        all.push({id:ev.id,date:ev.date,rnd,home,away,status});
-      });break;}
-    }
-    all.sort((a,b)=>new Date(a.date)-new Date(b.date));
-    setGames(all);setLd(false);
+    setLd(true);
+    const{games:g,yr:y}=await fetchMMGames();
+    setGames(g);setYr(y);setLd(false);
   })();},[]);
   const fg=games.filter(g=>round==="ALL"||g.rnd===round);
   const total=Object.keys(picks).length;
@@ -1425,7 +1414,7 @@ function MarchPicks(){
   if(!games.length)return<Emp t="No tournament games available for picks yet!" ic="🎯"/>;
   return<div>
     <div style={{fontFamily:F,fontSize:18,fontWeight:900,color:S.or,marginBottom:4}}>🎯 March Madness Picks</div>
-    <div style={{fontFamily:F,fontSize:11,color:S.dm,marginBottom:12}}>Pick winners for every game — track your accuracy</div>
+    <div style={{fontFamily:F,fontSize:11,color:S.dm,marginBottom:12}}>Pick winners for every game — track your accuracy{yr<2026?" ("+yr+" Tournament)":""}</div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:12}}>
       <SB l="PICKS MADE" v={total} c={S.ac}/>
       <SB l="CORRECT" v={correct} c={S.gn}/>
@@ -1459,7 +1448,7 @@ function MarchPicks(){
           </div>
           {[g.away,g.home].map((t,i)=>{const picked=myPick===t.name;
             return<div key={i} onClick={()=>{if(!done)setPick(g.id,t.name);}} style={{display:"flex",alignItems:"center",padding:"7px 10px",gap:8,cursor:done?"default":"pointer",background:picked?(isCorrect?S.gn+"12":isWrong?S.rd+"12":S.ac+"10"):"transparent",borderLeft:picked?"3px solid "+(isCorrect?S.gn:isWrong?S.rd:S.ac):"3px solid transparent",transition:"all .15s"}}>
-              {t.seed>0&&<span style={{fontFamily:F,fontSize:10,fontWeight:800,color:S.or,width:18,textAlign:"center"}}>{t.seed}</span>}
+              {t.seed>0&&t.seed<17&&<span style={{fontFamily:F,fontSize:10,fontWeight:800,color:S.or,width:18,textAlign:"center"}}>{t.seed}</span>}
               <img src={t.logo||cL(t.eid)} alt="" style={{width:20,height:20,objectFit:"contain"}} onError={e=>{e.target.style.display="none"}}/>
               <span style={{fontFamily:F,fontSize:12,fontWeight:picked?700:500,color:t.winner?S.gn:picked?S.ac:S.tx,flex:1}}>{t.name}</span>
               {done&&<span style={{fontFamily:F,fontSize:13,fontWeight:800,color:t.winner?S.gn:S.dm}}>{t.score||""}</span>}
@@ -1473,37 +1462,14 @@ function MarchPicks(){
 }
 
 function MarchScores(){
-  const[games,setGames]=useState([]);const[ld,setLd]=useState(true);const[round,setRound]=useState("ALL");const[filter,setFilter]=useState("ALL");
+  const[games,setGames]=useState([]);const[yr,setYr]=useState(2026);const[ld,setLd]=useState(true);const[round,setRound]=useState("ALL");const[filter,setFilter]=useState("ALL");
   const ROUNDS=["ALL","First Four","Round of 64","Round of 32","Sweet 16","Elite 8","Final Four","Championship"];
   const FILTERS=["ALL","Live","Upcoming","Final","Upsets"];
   useEffect(()=>{
     const load=async()=>{
-      setLd(true);const all=[];
-      for(const yr of[2026,2025]){
-        const d=await ef(`${E.cbb}/scoreboard?dates=${yr}0301-${yr}0410&groups=100&limit=300`);
-        if(d?.events?.length>0){(d.events||[]).forEach(ev=>{
-          const comp=ev.competitions?.[0];if(!comp)return;
-          const t1=comp.competitors?.[0];const t2=comp.competitors?.[1];
-          const notes=(comp.notes||[]).map(n=>n.headline||"").join(" ");
-          const status=comp.status?.type?.description||"";
-          const clock=comp.status?.displayClock||"";
-          const period=comp.status?.period||0;
-          let rnd="";
-          if(/first four/i.test(notes))rnd="First Four";
-          else if(/round of 64|first round/i.test(notes))rnd="Round of 64";
-          else if(/round of 32|second round/i.test(notes))rnd="Round of 32";
-          else if(/sweet 16/i.test(notes))rnd="Sweet 16";
-          else if(/elite 8/i.test(notes))rnd="Elite 8";
-          else if(/final four/i.test(notes))rnd="Final Four";
-          else if(/championship/i.test(notes))rnd="Championship";
-          const home={name:t1?.team?.shortDisplayName||"TBD",seed:t1?.curatedRank?.current||0,score:parseInt(t1?.score)||0,eid:t1?.team?.id||0,winner:t1?.winner||false,logo:t1?.team?.logo||cL(t1?.team?.id)};
-          const away={name:t2?.team?.shortDisplayName||"TBD",seed:t2?.curatedRank?.current||0,score:parseInt(t2?.score)||0,eid:t2?.team?.id||0,winner:t2?.winner||false,logo:t2?.team?.logo||cL(t2?.team?.id)};
-          const isUpset=status==="Final"&&((home.winner&&home.seed>away.seed&&away.seed>0)||(away.winner&&away.seed>home.seed&&home.seed>0));
-          all.push({id:ev.id,date:ev.date,rnd,home,away,status,clock,period,isUpset});
-        });break;}
-      }
-      all.sort((a,b)=>new Date(a.date)-new Date(b.date));
-      setGames(all);setLd(false);
+      setLd(true);
+      const{games:g,yr:y}=await fetchMMGames();
+      setGames(g);setYr(y);setLd(false);
     };
     load();
     const iv=setInterval(load,60000);
@@ -1523,7 +1489,7 @@ function MarchScores(){
       <div style={{fontFamily:F,fontSize:18,fontWeight:900,color:S.or}}>🏀 Tournament Scores</div>
       {liveCount>0&&<span style={{fontFamily:F,fontSize:10,fontWeight:800,color:S.gn,background:S.gn+"15",padding:"3px 8px",borderRadius:10,animation:"pulse 1.5s infinite"}}>{liveCount} LIVE</span>}
     </div>
-    <div style={{fontFamily:F,fontSize:11,color:S.dm,marginBottom:10}}>Auto-refreshes every 60s during games</div>
+    <div style={{fontFamily:F,fontSize:11,color:S.dm,marginBottom:10}}>Auto-refreshes every 60s during games{yr<2026?" — showing "+yr+" Tournament":""}</div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:12}}>
       <SB l="TOTAL GAMES" v={games.length} c={S.ac}/>
       <SB l="LIVE NOW" v={liveCount} c={S.gn}/>
@@ -1542,6 +1508,7 @@ function MarchScores(){
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 10px",background:live?S.gn+"08":g.isUpset?S.rd+"06":"transparent",borderBottom:"1px solid "+S.bd+"60"}}>
             <div style={{display:"flex",gap:6,alignItems:"center"}}>
               {g.rnd&&<span style={{fontFamily:F,fontSize:9,fontWeight:700,color:S.or,background:S.or+"15",padding:"2px 6px",borderRadius:4}}>{g.rnd}</span>}
+              {g.reg&&<span style={{fontFamily:F,fontSize:9,fontWeight:600,color:S.ac}}>{g.reg}</span>}
               {g.isUpset&&<span style={{fontFamily:F,fontSize:9,fontWeight:800,color:S.rd}}>🚨 UPSET</span>}
             </div>
             {live?<span style={{fontFamily:F,fontSize:10,fontWeight:800,color:S.gn}}>{g.clock} — {g.period===1?"1st":g.period===2?"2nd":"OT"}</span>
@@ -1549,7 +1516,7 @@ function MarchScores(){
             :<span style={{fontFamily:F,fontSize:9,color:S.dm}}>{fd(g.date)} {ft(g.date)}</span>}
           </div>
           {[g.away,g.home].map((t,i)=><div key={i} style={{display:"flex",alignItems:"center",padding:"7px 10px",gap:8,background:t.winner?S.gn+"08":"transparent"}}>
-            {t.seed>0&&<span style={{fontFamily:F,fontSize:11,fontWeight:900,color:t.seed<=4?S.or:t.seed<=8?S.ac:S.dm,width:20,textAlign:"center"}}>{t.seed}</span>}
+            {t.seed>0&&t.seed<17&&<span style={{fontFamily:F,fontSize:11,fontWeight:900,color:t.seed<=4?S.or:t.seed<=8?S.ac:S.dm,width:20,textAlign:"center"}}>{t.seed}</span>}
             <img src={t.logo||cL(t.eid)} alt="" style={{width:24,height:24,objectFit:"contain"}} onError={e=>{e.target.style.display="none"}}/>
             <span style={{fontFamily:F,fontSize:13,fontWeight:t.winner?800:500,color:t.winner?S.tx:done?S.dm:S.tx,flex:1}}>{t.name}</span>
             {(done||live)&&<span style={{fontFamily:F,fontSize:16,fontWeight:900,color:t.winner?S.gn:live?S.tx:S.dm}}>{t.score}</span>}
