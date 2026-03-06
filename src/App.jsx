@@ -1282,6 +1282,286 @@ function Promos(){
   </div>;
 }
 
+// ═══ MARCH MADNESS ═══
+if(!window._ghqPicks)window._ghqPicks={};
+if(!window._ghqPicksV)window._ghqPicksV=0;
+function usePicks(){
+  const[p,sP]=useState({...window._ghqPicks});
+  const vRef=useRef(window._ghqPicksV);
+  const upd=useCallback((id,team)=>{window._ghqPicks[id]=team;window._ghqPicksV++;sP({...window._ghqPicks});},[]);
+  useEffect(()=>{const i=setInterval(()=>{if(window._ghqPicksV!==vRef.current){vRef.current=window._ghqPicksV;sP({...window._ghqPicks});}},300);return()=>clearInterval(i);},[]);
+  return[p,upd];
+}
+
+function MarchMadness(){
+  const[games,setGames]=useState([]);const[ld,setLd]=useState(true);const[round,setRound]=useState("ALL");const[region,setRegion]=useState("ALL");
+  const ROUNDS=["ALL","First Four","Round of 64","Round of 32","Sweet 16","Elite 8","Final Four","Championship"];
+  const REGIONS=["ALL","East","West","South","Midwest"];
+  useEffect(()=>{(async()=>{
+    setLd(true);
+    const all=[];
+    // Fetch NCAA tournament games from ESPN — groups=100 is NCAA tournament
+    for(const yr of[2026,2025]){
+      const d=await ef(`${E.cbb}/scoreboard?dates=${yr}0301-${yr}0410&groups=100&limit=300`);
+      if(d?.events?.length>0){(d.events||[]).forEach(ev=>{
+        const comp=ev.competitions?.[0];if(!comp)return;
+        const t1=comp.competitors?.[0];const t2=comp.competitors?.[1];
+        const notes=(ev.competitions?.[0]?.notes||[]).map(n=>n.headline||"").join(" ");
+        const status=comp.status?.type?.description||"";
+        const clock=comp.status?.displayClock||"";
+        const period=comp.status?.period||0;
+        let rnd="";
+        if(/first four/i.test(notes))rnd="First Four";
+        else if(/round of 64|first round/i.test(notes))rnd="Round of 64";
+        else if(/round of 32|second round/i.test(notes))rnd="Round of 32";
+        else if(/sweet 16|sweet sixteen/i.test(notes))rnd="Sweet 16";
+        else if(/elite 8|elite eight/i.test(notes))rnd="Elite 8";
+        else if(/final four/i.test(notes))rnd="Final Four";
+        else if(/championship|national championship/i.test(notes))rnd="Championship";
+        let reg="";
+        if(/east/i.test(notes))reg="East";
+        else if(/west/i.test(notes))reg="West";
+        else if(/south/i.test(notes))reg="South";
+        else if(/midwest/i.test(notes))reg="Midwest";
+        const home={name:t1?.team?.shortDisplayName||t1?.team?.displayName||"TBD",abbr:t1?.team?.abbreviation||"",seed:t1?.curatedRank?.current||parseInt((notes.match(/\((\d+)\)/)||[])[1])||0,score:parseInt(t1?.score)||0,eid:t1?.team?.id||0,winner:t1?.winner||false,logo:t1?.team?.logo||cL(t1?.team?.id)};
+        const away={name:t2?.team?.shortDisplayName||t2?.team?.displayName||"TBD",abbr:t2?.team?.abbreviation||"",seed:t2?.curatedRank?.current||0,score:parseInt(t2?.score)||0,eid:t2?.team?.id||0,winner:t2?.winner||false,logo:t2?.team?.logo||cL(t2?.team?.id)};
+        const isUpset=status==="Final"&&((home.winner&&home.seed>away.seed&&away.seed>0)||(away.winner&&away.seed>home.seed&&home.seed>0));
+        all.push({id:ev.id,date:ev.date,rnd,reg,home,away,status,clock,period,notes,isUpset,yr});
+      });break;}
+    }
+    all.sort((a,b)=>new Date(a.date)-new Date(b.date));
+    setGames(all);setLd(false);
+  })();},[]);
+  const fg=games.filter(g=>(round==="ALL"||g.rnd===round)&&(region==="ALL"||g.reg===region));
+  const upsets=games.filter(g=>g.isUpset);
+  if(ld)return<Spin t="Loading bracket..."/>;
+  if(!games.length)return<Emp t="No tournament games found yet. Check back when the bracket is released!" ic="🏀"/>;
+  return<div>
+    <div style={{fontFamily:F,fontSize:18,fontWeight:900,color:S.or,marginBottom:4}}>🏆 March Madness</div>
+    <div style={{fontFamily:F,fontSize:11,color:S.dm,marginBottom:12}}>NCAA Tournament Bracket</div>
+    {upsets.length>0&&<Card style={{padding:10,marginBottom:12,border:"1px solid "+S.or+"30"}}>
+      <div style={{fontFamily:F,fontSize:11,fontWeight:800,color:S.or,marginBottom:6}}>🚨 UPSET ALERTS</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+        {upsets.slice(0,8).map(g=>{const w=g.home.winner?g.home:g.away;const l=g.home.winner?g.away:g.home;
+          return<div key={g.id} style={{background:S.rd+"10",border:"1px solid "+S.rd+"25",borderRadius:6,padding:"4px 8px",fontFamily:F,fontSize:10}}>
+            <span style={{color:S.gn,fontWeight:700}}>#{w.seed} {w.name}</span>
+            <span style={{color:S.dm}}> over </span>
+            <span style={{color:S.rd,fontWeight:700}}>#{l.seed} {l.name}</span>
+          </div>;
+        })}
+      </div>
+    </Card>}
+    <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>
+      {ROUNDS.map(r=><Pill key={r} l={r} a={round===r} c={S.or} onClick={()=>setRound(r)} sm/>)}
+    </div>
+    <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:12}}>
+      {REGIONS.map(r=><Pill key={r} l={r} a={region===r} c={S.ac} onClick={()=>setRegion(r)} sm/>)}
+    </div>
+    <div style={{display:"grid",gap:8}}>
+      {fg.map(g=>{
+        const done=g.status==="Final";const live=g.status==="In Progress";
+        return<Card key={g.id} style={{padding:0,border:live?"1px solid "+S.gn+"40":g.isUpset?"1px solid "+S.rd+"40":undefined}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 10px",borderBottom:"1px solid "+S.bd+"60"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              {g.rnd&&<span style={{fontFamily:F,fontSize:9,fontWeight:700,color:S.or,background:S.or+"15",padding:"2px 6px",borderRadius:4}}>{g.rnd}</span>}
+              {g.reg&&<span style={{fontFamily:F,fontSize:9,fontWeight:600,color:S.ac}}>{g.reg}</span>}
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              {g.isUpset&&<span style={{fontFamily:F,fontSize:9,fontWeight:800,color:S.rd,background:S.rd+"15",padding:"2px 6px",borderRadius:4}}>UPSET</span>}
+              {live&&<span style={{fontFamily:F,fontSize:9,fontWeight:800,color:S.gn,background:S.gn+"15",padding:"2px 6px",borderRadius:4,animation:"pulse 1.5s infinite"}}>LIVE</span>}
+              {done&&<span style={{fontFamily:F,fontSize:9,fontWeight:600,color:S.dm}}>Final</span>}
+              {!done&&!live&&<span style={{fontFamily:F,fontSize:9,color:S.dm}}>{fd(g.date)} {ft(g.date)}</span>}
+            </div>
+          </div>
+          {[g.away,g.home].map((t,i)=><div key={i} style={{display:"flex",alignItems:"center",padding:"6px 10px",gap:8,background:t.winner?S.gn+"08":"transparent"}}>
+            {t.seed>0&&<span style={{fontFamily:F,fontSize:10,fontWeight:800,color:t.seed<=4?S.or:t.seed<=8?S.ac:S.dm,width:18,textAlign:"center"}}>{t.seed}</span>}
+            <img src={t.logo||cL(t.eid)} alt="" style={{width:22,height:22,objectFit:"contain"}} onError={e=>{e.target.style.display="none"}}/>
+            <span style={{fontFamily:F,fontSize:12,fontWeight:t.winner?800:500,color:t.winner?S.tx:done?S.dm:S.tx,flex:1}}>{t.name}</span>
+            {(done||live)&&<span style={{fontFamily:F,fontSize:14,fontWeight:800,color:t.winner?S.gn:S.dm}}>{t.score}</span>}
+          </div>)}
+          {live&&<div style={{padding:"3px 10px 6px",fontFamily:F,fontSize:9,color:S.gn,fontWeight:600}}>{g.period>0?`${g.clock} — ${g.period===1?"1st":g.period===2?"2nd":"OT"} Half`:g.clock}</div>}
+        </Card>;
+      })}
+    </div>
+    {fg.length===0&&<Emp t="No games found for this round/region" ic="🏀"/>}
+  </div>;
+}
+
+function MarchPicks(){
+  const[picks,setPick]=usePicks();
+  const[games,setGames]=useState([]);const[ld,setLd]=useState(true);const[round,setRound]=useState("ALL");
+  const ROUNDS=["ALL","Round of 64","Round of 32","Sweet 16","Elite 8","Final Four","Championship"];
+  useEffect(()=>{(async()=>{
+    setLd(true);const all=[];
+    for(const yr of[2026,2025]){
+      const d=await ef(`${E.cbb}/scoreboard?dates=${yr}0301-${yr}0410&groups=100&limit=300`);
+      if(d?.events?.length>0){(d.events||[]).forEach(ev=>{
+        const comp=ev.competitions?.[0];if(!comp)return;
+        const t1=comp.competitors?.[0];const t2=comp.competitors?.[1];
+        const notes=(comp.notes||[]).map(n=>n.headline||"").join(" ");
+        const status=comp.status?.type?.description||"";
+        let rnd="";
+        if(/round of 64|first round/i.test(notes))rnd="Round of 64";
+        else if(/round of 32|second round/i.test(notes))rnd="Round of 32";
+        else if(/sweet 16/i.test(notes))rnd="Sweet 16";
+        else if(/elite 8/i.test(notes))rnd="Elite 8";
+        else if(/final four/i.test(notes))rnd="Final Four";
+        else if(/championship/i.test(notes))rnd="Championship";
+        else rnd="Round of 64";
+        const home={name:t1?.team?.shortDisplayName||"TBD",seed:t1?.curatedRank?.current||0,eid:t1?.team?.id||0,winner:t1?.winner||false,logo:t1?.team?.logo||cL(t1?.team?.id)};
+        const away={name:t2?.team?.shortDisplayName||"TBD",seed:t2?.curatedRank?.current||0,eid:t2?.team?.id||0,winner:t2?.winner||false,logo:t2?.team?.logo||cL(t2?.team?.id)};
+        all.push({id:ev.id,date:ev.date,rnd,home,away,status});
+      });break;}
+    }
+    all.sort((a,b)=>new Date(a.date)-new Date(b.date));
+    setGames(all);setLd(false);
+  })();},[]);
+  const fg=games.filter(g=>round==="ALL"||g.rnd===round);
+  const total=Object.keys(picks).length;
+  const correct=games.filter(g=>{const p=picks[g.id];if(!p)return false;const done=g.status==="Final";if(!done)return false;return(g.home.winner&&p===g.home.name)||(g.away.winner&&p===g.away.name);}).length;
+  const wrong=games.filter(g=>{const p=picks[g.id];if(!p)return false;const done=g.status==="Final";if(!done)return false;return!((g.home.winner&&p===g.home.name)||(g.away.winner&&p===g.away.name));}).length;
+  const pending=total-correct-wrong;
+  if(ld)return<Spin t="Loading games..."/>;
+  if(!games.length)return<Emp t="No tournament games available for picks yet!" ic="🎯"/>;
+  return<div>
+    <div style={{fontFamily:F,fontSize:18,fontWeight:900,color:S.or,marginBottom:4}}>🎯 March Madness Picks</div>
+    <div style={{fontFamily:F,fontSize:11,color:S.dm,marginBottom:12}}>Pick winners for every game — track your accuracy</div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:12}}>
+      <SB l="PICKS MADE" v={total} c={S.ac}/>
+      <SB l="CORRECT" v={correct} c={S.gn}/>
+      <SB l="WRONG" v={wrong} c={S.rd}/>
+      <SB l="PENDING" v={pending} c={S.yl}/>
+    </div>
+    {total>0&&<Card style={{padding:10,marginBottom:12}}>
+      <div style={{fontFamily:F,fontSize:11,fontWeight:700,color:S.tx,marginBottom:4}}>Accuracy</div>
+      <div style={{height:8,background:S.bd,borderRadius:4,overflow:"hidden"}}>
+        <div style={{height:"100%",width:(correct+wrong)>0?((correct/(correct+wrong))*100)+"%":"0%",background:S.gn,borderRadius:4,transition:"width .3s"}}/>
+      </div>
+      <div style={{fontFamily:F,fontSize:10,color:S.dm,marginTop:3}}>{(correct+wrong)>0?Math.round((correct/(correct+wrong))*100):0}% ({correct}/{correct+wrong} decided)</div>
+    </Card>}
+    <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:12}}>
+      {ROUNDS.map(r=><Pill key={r} l={r} a={round===r} c={S.or} onClick={()=>setRound(r)} sm/>)}
+    </div>
+    <div style={{display:"grid",gap:8}}>
+      {fg.map(g=>{
+        const done=g.status==="Final";const myPick=picks[g.id];
+        const isCorrect=done&&myPick&&((g.home.winner&&myPick===g.home.name)||(g.away.winner&&myPick===g.away.name));
+        const isWrong=done&&myPick&&!isCorrect;
+        return<Card key={g.id} style={{padding:0,border:isCorrect?"1px solid "+S.gn+"50":isWrong?"1px solid "+S.rd+"50":undefined}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 10px",borderBottom:"1px solid "+S.bd+"60"}}>
+            <span style={{fontFamily:F,fontSize:9,fontWeight:700,color:S.or}}>{g.rnd}</span>
+            <div style={{display:"flex",gap:4,alignItems:"center"}}>
+              {isCorrect&&<span style={{fontFamily:F,fontSize:9,fontWeight:800,color:S.gn}}>✓ CORRECT</span>}
+              {isWrong&&<span style={{fontFamily:F,fontSize:9,fontWeight:800,color:S.rd}}>✗ WRONG</span>}
+              {!done&&myPick&&<span style={{fontFamily:F,fontSize:9,fontWeight:600,color:S.yl}}>PICKED</span>}
+              <span style={{fontFamily:F,fontSize:9,color:S.dm}}>{done?"Final":fd(g.date)}</span>
+            </div>
+          </div>
+          {[g.away,g.home].map((t,i)=>{const picked=myPick===t.name;
+            return<div key={i} onClick={()=>{if(!done)setPick(g.id,t.name);}} style={{display:"flex",alignItems:"center",padding:"7px 10px",gap:8,cursor:done?"default":"pointer",background:picked?(isCorrect?S.gn+"12":isWrong?S.rd+"12":S.ac+"10"):"transparent",borderLeft:picked?"3px solid "+(isCorrect?S.gn:isWrong?S.rd:S.ac):"3px solid transparent",transition:"all .15s"}}>
+              {t.seed>0&&<span style={{fontFamily:F,fontSize:10,fontWeight:800,color:S.or,width:18,textAlign:"center"}}>{t.seed}</span>}
+              <img src={t.logo||cL(t.eid)} alt="" style={{width:20,height:20,objectFit:"contain"}} onError={e=>{e.target.style.display="none"}}/>
+              <span style={{fontFamily:F,fontSize:12,fontWeight:picked?700:500,color:t.winner?S.gn:picked?S.ac:S.tx,flex:1}}>{t.name}</span>
+              {done&&<span style={{fontFamily:F,fontSize:13,fontWeight:800,color:t.winner?S.gn:S.dm}}>{t.score||""}</span>}
+              {!done&&picked&&<span style={{fontFamily:F,fontSize:10,color:S.ac}}>✓</span>}
+            </div>;
+          })}
+        </Card>;
+      })}
+    </div>
+  </div>;
+}
+
+function MarchScores(){
+  const[games,setGames]=useState([]);const[ld,setLd]=useState(true);const[round,setRound]=useState("ALL");const[filter,setFilter]=useState("ALL");
+  const ROUNDS=["ALL","First Four","Round of 64","Round of 32","Sweet 16","Elite 8","Final Four","Championship"];
+  const FILTERS=["ALL","Live","Upcoming","Final","Upsets"];
+  useEffect(()=>{
+    const load=async()=>{
+      setLd(true);const all=[];
+      for(const yr of[2026,2025]){
+        const d=await ef(`${E.cbb}/scoreboard?dates=${yr}0301-${yr}0410&groups=100&limit=300`);
+        if(d?.events?.length>0){(d.events||[]).forEach(ev=>{
+          const comp=ev.competitions?.[0];if(!comp)return;
+          const t1=comp.competitors?.[0];const t2=comp.competitors?.[1];
+          const notes=(comp.notes||[]).map(n=>n.headline||"").join(" ");
+          const status=comp.status?.type?.description||"";
+          const clock=comp.status?.displayClock||"";
+          const period=comp.status?.period||0;
+          let rnd="";
+          if(/first four/i.test(notes))rnd="First Four";
+          else if(/round of 64|first round/i.test(notes))rnd="Round of 64";
+          else if(/round of 32|second round/i.test(notes))rnd="Round of 32";
+          else if(/sweet 16/i.test(notes))rnd="Sweet 16";
+          else if(/elite 8/i.test(notes))rnd="Elite 8";
+          else if(/final four/i.test(notes))rnd="Final Four";
+          else if(/championship/i.test(notes))rnd="Championship";
+          const home={name:t1?.team?.shortDisplayName||"TBD",seed:t1?.curatedRank?.current||0,score:parseInt(t1?.score)||0,eid:t1?.team?.id||0,winner:t1?.winner||false,logo:t1?.team?.logo||cL(t1?.team?.id)};
+          const away={name:t2?.team?.shortDisplayName||"TBD",seed:t2?.curatedRank?.current||0,score:parseInt(t2?.score)||0,eid:t2?.team?.id||0,winner:t2?.winner||false,logo:t2?.team?.logo||cL(t2?.team?.id)};
+          const isUpset=status==="Final"&&((home.winner&&home.seed>away.seed&&away.seed>0)||(away.winner&&away.seed>home.seed&&home.seed>0));
+          all.push({id:ev.id,date:ev.date,rnd,home,away,status,clock,period,isUpset});
+        });break;}
+      }
+      all.sort((a,b)=>new Date(a.date)-new Date(b.date));
+      setGames(all);setLd(false);
+    };
+    load();
+    const iv=setInterval(load,60000);
+    return()=>clearInterval(iv);
+  },[]);
+  let fg=games.filter(g=>round==="ALL"||g.rnd===round);
+  if(filter==="Live")fg=fg.filter(g=>g.status==="In Progress");
+  else if(filter==="Upcoming")fg=fg.filter(g=>g.status==="Scheduled"||g.status==="Pre");
+  else if(filter==="Final")fg=fg.filter(g=>g.status==="Final");
+  else if(filter==="Upsets")fg=fg.filter(g=>g.isUpset);
+  const liveCount=games.filter(g=>g.status==="In Progress").length;
+  const upsetCount=games.filter(g=>g.isUpset).length;
+  if(ld)return<Spin t="Loading tournament scores..."/>;
+  if(!games.length)return<Emp t="No tournament scores yet — check back when games tip off!" ic="🏀"/>;
+  return<div>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+      <div style={{fontFamily:F,fontSize:18,fontWeight:900,color:S.or}}>🏀 Tournament Scores</div>
+      {liveCount>0&&<span style={{fontFamily:F,fontSize:10,fontWeight:800,color:S.gn,background:S.gn+"15",padding:"3px 8px",borderRadius:10,animation:"pulse 1.5s infinite"}}>{liveCount} LIVE</span>}
+    </div>
+    <div style={{fontFamily:F,fontSize:11,color:S.dm,marginBottom:10}}>Auto-refreshes every 60s during games</div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:12}}>
+      <SB l="TOTAL GAMES" v={games.length} c={S.ac}/>
+      <SB l="LIVE NOW" v={liveCount} c={S.gn}/>
+      <SB l="UPSETS" v={upsetCount} c={S.rd}/>
+    </div>
+    <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:6}}>
+      {FILTERS.map(f=><Pill key={f} l={f==="Upsets"?"🚨 Upsets":f} a={filter===f} c={f==="Upsets"?S.rd:f==="Live"?S.gn:S.ac} onClick={()=>setFilter(f)} sm/>)}
+    </div>
+    <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:12}}>
+      {ROUNDS.map(r=><Pill key={r} l={r} a={round===r} c={S.or} onClick={()=>setRound(r)} sm/>)}
+    </div>
+    <div style={{display:"grid",gap:8}}>
+      {fg.map(g=>{
+        const done=g.status==="Final";const live=g.status==="In Progress";
+        return<Card key={g.id} style={{padding:0,border:live?"1px solid "+S.gn+"50":g.isUpset?"1px solid "+S.rd+"40":undefined}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 10px",background:live?S.gn+"08":g.isUpset?S.rd+"06":"transparent",borderBottom:"1px solid "+S.bd+"60"}}>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              {g.rnd&&<span style={{fontFamily:F,fontSize:9,fontWeight:700,color:S.or,background:S.or+"15",padding:"2px 6px",borderRadius:4}}>{g.rnd}</span>}
+              {g.isUpset&&<span style={{fontFamily:F,fontSize:9,fontWeight:800,color:S.rd}}>🚨 UPSET</span>}
+            </div>
+            {live?<span style={{fontFamily:F,fontSize:10,fontWeight:800,color:S.gn}}>{g.clock} — {g.period===1?"1st":g.period===2?"2nd":"OT"}</span>
+            :done?<span style={{fontFamily:F,fontSize:9,color:S.dm}}>Final</span>
+            :<span style={{fontFamily:F,fontSize:9,color:S.dm}}>{fd(g.date)} {ft(g.date)}</span>}
+          </div>
+          {[g.away,g.home].map((t,i)=><div key={i} style={{display:"flex",alignItems:"center",padding:"7px 10px",gap:8,background:t.winner?S.gn+"08":"transparent"}}>
+            {t.seed>0&&<span style={{fontFamily:F,fontSize:11,fontWeight:900,color:t.seed<=4?S.or:t.seed<=8?S.ac:S.dm,width:20,textAlign:"center"}}>{t.seed}</span>}
+            <img src={t.logo||cL(t.eid)} alt="" style={{width:24,height:24,objectFit:"contain"}} onError={e=>{e.target.style.display="none"}}/>
+            <span style={{fontFamily:F,fontSize:13,fontWeight:t.winner?800:500,color:t.winner?S.tx:done?S.dm:S.tx,flex:1}}>{t.name}</span>
+            {(done||live)&&<span style={{fontFamily:F,fontSize:16,fontWeight:900,color:t.winner?S.gn:live?S.tx:S.dm}}>{t.score}</span>}
+          </div>)}
+        </Card>;
+      })}
+    </div>
+    {fg.length===0&&<Emp t={filter==="Live"?"No games live right now":filter==="Upsets"?"No upsets yet — stay tuned!":"No games in this round yet"} ic="🏀"/>}
+    <style>{"@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}"}</style>
+  </div>;
+}
+
 // ═══ MAIN APP ═══
 const TABS=[
   {id:"sc",i:"🏈",l:"Scores",g:"NFL"},{id:"st",i:"📊",l:"Standings",g:"NFL"},{id:"ro",i:"👥",l:"Rosters",g:"NFL"},{id:"stat",i:"📈",l:"Stats",g:"NFL"},{id:"tp",i:"🏟️",l:"Teams",g:"NFL"},{id:"h2h",i:"⚔️",l:"H2H",g:"NFL"},{id:"ndr",i:"📝",l:"Draft",g:"NFL"},
@@ -1289,7 +1569,7 @@ const TABS=[
   {id:"mlsc",i:"⚾",l:"Scores",g:"MLB"},{id:"mlst",i:"📊",l:"Standings",g:"MLB"},{id:"mlro",i:"👥",l:"Rosters",g:"MLB"},{id:"mlsa",i:"📈",l:"Stats",g:"MLB"},
   {id:"hlsc",i:"🏒",l:"Scores",g:"NHL"},{id:"hlst",i:"📊",l:"Standings",g:"NHL"},{id:"hlro",i:"👥",l:"Rosters",g:"NHL"},{id:"hlsa",i:"📈",l:"Stats",g:"NHL"},
   {id:"csc",i:"🏈",l:"Scores",g:"CFB"},{id:"crk",i:"🏆",l:"Rankings",g:"CFB"},{id:"cro",i:"📋",l:"Rosters",g:"CFB"},{id:"cst",i:"📈",l:"Stats",g:"CFB"},
-  {id:"bsc",i:"🏀",l:"Scores",g:"CBB"},{id:"brk",i:"🏆",l:"Rankings",g:"CBB"},{id:"bro",i:"📋",l:"Rosters",g:"CBB"},{id:"bst",i:"📈",l:"Stats",g:"CBB"},
+  {id:"bmm",i:"🏆",l:"Bracket",g:"CBB"},{id:"bpk",i:"🎯",l:"Picks",g:"CBB"},{id:"bms",i:"📺",l:"Tourney",g:"CBB"},{id:"bsc",i:"🏀",l:"Scores",g:"CBB"},{id:"brk",i:"🏆",l:"Rankings",g:"CBB"},{id:"bro",i:"📋",l:"Rosters",g:"CBB"},{id:"bst",i:"📈",l:"Stats",g:"CBB"},
   {id:"fan",i:"⚡",l:"Fantasy",g:"FAN"},{id:"trn",i:"🔥",l:"Waivers",g:"FAN"},{id:"drft",i:"📋",l:"Draft",g:"FAN"},{id:"trd",i:"⚖️",l:"Trade",g:"FAN"},{id:"cmp",i:"🔄",l:"Compare",g:"FAN"},
   {id:"bet",i:"💰",l:"Betting",g:"ODDS"},{id:"par",i:"🎯",l:"Parlay",g:"ODDS"},{id:"prop",i:"🎲",l:"Props",g:"ODDS"},{id:"ocp",i:"📊",l:"Compare",g:"ODDS"},
   {id:"inj",i:"🏥",l:"Injuries",g:"MORE"},{id:"nw",i:"📰",l:"News",g:"MORE"}
@@ -1308,7 +1588,7 @@ export default function App(){
     MLB:[{id:"mlsc",i:"⚾",l:"Scores"},{id:"mlst",i:"📊",l:"Standings"},{id:"mlro",i:"👥",l:"Rosters"},{id:"mlsa",i:"📈",l:"Stats"},{id:"mlh2h",i:"⚔️",l:"H2H"}],
     NHL:[{id:"hlsc",i:"🏒",l:"Scores"},{id:"hlst",i:"📊",l:"Standings"},{id:"hlro",i:"👥",l:"Rosters"},{id:"hlsa",i:"📈",l:"Stats"},{id:"hlh2h",i:"⚔️",l:"H2H"}],
     CFB:[{id:"csc",i:"🏈",l:"Scores"},{id:"crk",i:"🏆",l:"Rankings"},{id:"cro",i:"📋",l:"Rosters"},{id:"cst",i:"📈",l:"Stats"}],
-    CBB:[{id:"bsc",i:"🏀",l:"Scores"},{id:"brk",i:"🏆",l:"Rankings"},{id:"bro",i:"📋",l:"Rosters"},{id:"bst",i:"📈",l:"Stats"}],
+    CBB:[{id:"bmm",i:"🏆",l:"Bracket"},{id:"bpk",i:"🎯",l:"Picks"},{id:"bms",i:"📺",l:"Tourney"},{id:"bsc",i:"🏀",l:"Scores"},{id:"brk",i:"🏆",l:"Rankings"},{id:"bro",i:"📋",l:"Rosters"},{id:"bst",i:"📈",l:"Stats"}],
     LAX:[{id:"lxsc",i:"🥍",l:"Scores"},{id:"lxro",i:"📋",l:"Teams"}],
     FAN:[{id:"fan",i:"⚡",l:"Fantasy"},{id:"trn",i:"🔥",l:"Waivers"},{id:"drft",i:"📋",l:"Draft"},{id:"trd",i:"⚖️",l:"Trade"},{id:"cmp",i:"🔄",l:"Compare"}],
     ODDS:[{id:"bet",i:"💰",l:"Betting"},{id:"par",i:"🎯",l:"Parlay"},{id:"prop",i:"🎲",l:"Props"},{id:"ocp",i:"📊",l:"Compare"}],
@@ -1367,6 +1647,9 @@ export default function App(){
       {sub==="crk"&&<Rankings title="CFB Rankings" sport="cfb" yearRange={[2025,2024,2023,2022]} defYear={2025} color={S.gn} mw={16} defWk={14}/>}
       {sub==="cro"&&<Rosters title="CFB Rosters" teams={CFB} sport="cfb" nf="n" cf="cl" lf={t=>cL(t.eid)}/>}
       {sub==="cst"&&<Stats sport="cfb" title="CFB Stat Leaders" color={S.ac}/>}
+      {sub==="bmm"&&<MarchMadness/>}
+      {sub==="bpk"&&<MarchPicks/>}
+      {sub==="bms"&&<MarchScores/>}
       {sub==="bsc"&&<Scores sport="cbb" title="CBB Scores" yearRange={[2026,2025,2024,2023]} defYear={2025} color={S.or} showConf/>}
       {sub==="brk"&&<Rankings title="CBB Rankings" sport="cbb" yearRange={[2026,2025,2024,2023]} defYear={2025} color={S.or} mw={20} defWk={16}/>}
       {sub==="bro"&&<Rosters title="CBB Rosters" teams={CBB} sport="cbb" nf="n" cf="cl" lf={t=>cL(t.eid)}/>}
