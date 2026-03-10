@@ -78,7 +78,7 @@ const SB=({l,v,c})=><Card style={{padding:12,textAlign:"center"}}><div style={{f
 function PM({pid,info,sport,onClose}){
   const[prof,setProf]=useState(null);const[news,setNews]=useState([]);const[games,setGames]=useState([]);const[ld,setLd]=useState(true);const[tab,setTab]=useState("overview");
   const sp=({nfl:"football/nfl",cfb:"football/college-football",cbb:"basketball/mens-college-basketball",nba:"basketball/nba",mlb:"baseball/mlb",nhl:"hockey/nhl",clx:"lacrosse/mens-college-lacrosse"})[sport]||sport;
-  const spShort=sport==="nfl"?"nfl":sport==="cfb"?"college-football":"mens-college-basketball";
+  const spShort=({nfl:"nfl",cfb:"college-football",cbb:"mens-college-basketball",nba:"nba",mlb:"mlb",nhl:"nhl",clx:"mens-college-lacrosse"})[sport]||sport;
   useEffect(()=>{if(!pid)return;setLd(true);setProf(null);setNews([]);setGames([]);(async()=>{
     // 1. Try profile endpoint
     let p=null;
@@ -232,7 +232,7 @@ function PM({pid,info,sport,onClose}){
               <div style={{fontFamily:F,fontSize:13,color:S.sub,marginBottom:12}}>News for {name}</div>
               <div style={{display:"flex",flexDirection:"column",gap:8,alignItems:"center"}}>
                 <a href={espnLink} target="_blank" rel="noopener noreferrer" style={{fontFamily:F,fontSize:12,color:S.ac,textDecoration:"none",fontWeight:600,padding:"8px 16px",background:S.ac+"10",borderRadius:8,border:"1px solid "+S.ac+"30"}}>📺 View on ESPN →</a>
-                <a href={`https://www.google.com/search?q=${encodeURIComponent(name+" "+teamName+" NFL news")}&tbm=nws`} target="_blank" rel="noopener noreferrer" style={{fontFamily:F,fontSize:12,color:S.or,textDecoration:"none",fontWeight:600,padding:"8px 16px",background:S.or+"10",borderRadius:8,border:"1px solid "+S.or+"30"}}>🔍 Google News →</a>
+                <a href={`https://www.google.com/search?q=${encodeURIComponent(name+" "+teamName+" "+sport.toUpperCase()+" news")}&tbm=nws`} target="_blank" rel="noopener noreferrer" style={{fontFamily:F,fontSize:12,color:S.or,textDecoration:"none",fontWeight:600,padding:"8px 16px",background:S.or+"10",borderRadius:8,border:"1px solid "+S.or+"30"}}>🔍 Google News →</a>
                 <a href={`https://twitter.com/search?q=${encodeURIComponent(name)}&f=live`} target="_blank" rel="noopener noreferrer" style={{fontFamily:F,fontSize:12,color:S.tl,textDecoration:"none",fontWeight:600,padding:"8px 16px",background:S.tl+"10",borderRadius:8,border:"1px solid "+S.tl+"30"}}>🐦 Latest on X →</a>
               </div>
             </div>}
@@ -363,7 +363,8 @@ function Standings({sport="nfl"}){
   const sportTeams={nfl:NFL,nba:NBA,mlb:MLB,nhl:NHL};
   const confList=sportConfs[sport]||["ALL"];
   const refTeams=sportTeams[sport]||[];
-  const[yr,setYr]=useState(2024);const[teams,setTeams]=useState([]);const[ld,setLd]=useState(false);const[err,setErr]=useState(null);const[conf,setConf]=useState("ALL");
+  const defStandingsYr=(sport==="nba"||sport==="nhl")?2026:2025;
+  const[yr,setYr]=useState(defStandingsYr);const[teams,setTeams]=useState([]);const[ld,setLd]=useState(false);const[err,setErr]=useState(null);const[conf,setConf]=useState("ALL");
   useEffect(()=>{setLd(true);setErr(null);setTeams([]);(async()=>{
     const d=await ef(`${E[sport]}/teams?limit=50`);
     const allT=d?.sports?.[0]?.leagues?.[0]?.teams||[];
@@ -404,21 +405,29 @@ function Standings({sport="nfl"}){
     </Card>)}</div>}</div>;
 }
 
-// Stats - NFL uses Sleeper (real stats), all others use ESPN scoreboard leaders
+// Stats - NFL uses Sleeper (real stats w/ caching), all others use ESPN leaders with season param
+// Global cache for Sleeper player DB and aggregated stats to prevent re-fetching
+if(!window._ghqSleeperPD)window._ghqSleeperPD=null;
+if(!window._ghqStatsCache)window._ghqStatsCache={};
 function Stats({sport="nfl",title="Stats",color}){
   const[leaders,setLeaders]=useState({});const[ld,setLd]=useState(true);const[err,setErr]=useState(null);const[cat,setCat]=useState("");const[selP,setSelP]=useState(null);
   const isNfl=sport==="nfl";const isCfb=sport==="cfb";const isCbb=sport==="cbb";const isNba=sport==="nba";const isMlb=sport==="mlb";const isNhl=sport==="nhl";
+  // Season years: NBA/NHL/CBB run Oct-Jun so "2026" season = 2025-26
   const defYr=(isCbb||isNba||isNhl)?2026:2025;const years=(isCbb||isNba||isNhl)?[2026,2025,2024,2023]:[2025,2024,2023,2022];
-  const maxW=isNfl?18:isCfb?15:isNba?30:isMlb?26:isNhl?30:20;const hasWeeks=isNfl||isCfb;
+  const maxW=isNfl?18:isCfb?15:20;const hasWeeks=isNfl||isCfb;
   const[yr,setYr]=useState(defYr);const[mode,setMode]=useState("season");const[wk,setWk]=useState(isNfl?1:isCfb?15:12);
   const ep=E[sport];const clr=color||(isNfl?S.gn:isCfb?S.ac:S.or);
   useEffect(()=>{setLd(true);setErr(null);setLeaders({});setCat("");(async()=>{
     if(isNfl){
-      // NFL: Use Sleeper API for REAL per-player stats
-      const[pd]=await Promise.all([fetch("https://api.sleeper.app/v1/players/nfl").then(r=>r.ok?r.json():null).catch(()=>null)]);
-      if(!pd){setErr("Sleeper API unavailable");setLd(false);return;}
+      // NFL: Use Sleeper API for REAL per-player stats (cached player DB)
+      let pd=window._ghqSleeperPD;
+      if(!pd){pd=await fetch("https://api.sleeper.app/v1/players/nfl").then(r=>r.ok?r.json():null).catch(()=>null);if(pd)window._ghqSleeperPD=pd;}
+      if(!pd){setErr("Sleeper API unavailable — try refreshing");setLd(false);return;}
       if(mode==="season"){
-        // Aggregate all weeks
+        // Check cache first
+        const cKey=`nfl_stats_${yr}_season`;
+        if(window._ghqStatsCache[cKey]){const c=window._ghqStatsCache[cKey];setLeaders(c.cats);setCat(Object.keys(c.cats)[0]||"");setLd(false);return;}
+        // Aggregate all weeks with parallel fetch
         const weekNums=Array.from({length:maxW},(_,i)=>i+1);
         const results=await Promise.allSettled(weekNums.map(w=>fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${yr}/${w}`).then(r=>r.ok?r.json():null).catch(()=>null)));
         const totals={};
@@ -440,8 +449,8 @@ function Stats({sport="nfl",title="Stats",color}){
           "Receiving":all.filter(p=>p.rec>5).map(p=>({...p,value:p.rec+" REC · "+Math.round(p.rec_yd).toLocaleString()+" YDS",numVal:p.rec_yd})).sort((a,b)=>b.numVal-a.numVal),
           "Fantasy PPR":all.filter(p=>p.pts_ppr>10).map(p=>({...p,value:p.pts_ppr.toFixed(1)+" PTS",numVal:p.pts_ppr})).sort((a,b)=>b.numVal-a.numVal),
           "Touchdowns":all.filter(p=>(p.pass_td+p.rush_td+p.rec_td)>0).map(p=>{const td=p.pass_td+p.rush_td+p.rec_td;return{...p,value:td+" TD ("+p.pass_td+"P/"+p.rush_td+"R/"+p.rec_td+"Rec)",numVal:td};}).sort((a,b)=>b.numVal-a.numVal)};
-        if(Object.values(cats).some(v=>v.length>0)){setLeaders(cats);setCat(Object.keys(cats)[0]);}
-        else setErr("No stats found for "+yr);
+        if(Object.values(cats).some(v=>v.length>0)){window._ghqStatsCache[cKey]={cats,ts:Date.now()};setLeaders(cats);setCat(Object.keys(cats)[0]);}
+        else setErr("No stats found for "+yr+" — season may not have started");
       } else {
         // Single week from Sleeper
         const st=await fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${yr}/${wk}`).then(r=>r.ok?r.json():null).catch(()=>null);
@@ -457,71 +466,90 @@ function Stats({sport="nfl",title="Stats",color}){
         if(Object.values(cats).some(v=>v.length>0)){setLeaders(cats);setCat(Object.keys(cats)[0]);}
         else setErr("No data for week "+wk);
       }
-    } else {
-      // Other sports: use ESPN leaders endpoint (fast!) + scoreboard fallback for CFB
-      const cats={};const extra=isCfb?"&groups=80":isCbb?"&groups=50":"";
-      if(hasWeeks){
-        // CFB: week-based scoreboard leaders (reasonable # of fetches)
-        const fetchWk=async w=>ef(`${ep}/scoreboard?dates=${yr}&seasontype=2&week=${w}&limit=200${extra}`);
-        const process=events=>{(events||[]).forEach(ev=>{const comp=ev.competitions?.[0];if(!comp)return;
-          (comp.leaders||[]).forEach(ldr=>{const cn=ldr.displayName||ldr.name||"Other";if(!cats[cn])cats[cn]=[];
-            (ldr.leaders||[]).forEach(l=>{const at=l.athlete||{};
-              cats[cn].push({id:at.id,name:at.displayName||at.shortName||at.fullName,pos:at.position?.abbreviation,espnId:at.id,
-                headshot:at.headshot,value:l.displayValue||"",numVal:parseYds(l.displayValue),
-                team:l.team?.abbreviation||"",teamObj:l.team||comp.competitors?.find(x=>String(x.team?.id)===String(at.teamId))?.team||{}});
-            });});});};
-        if(mode==="season"){
-          const wks=Array.from({length:maxW},(_,i)=>i+1);const res=await Promise.allSettled(wks.map(w=>fetchWk(w)));
-          res.forEach(r=>{if(r.status==="fulfilled"&&r.value?.events)process(r.value.events);});
-          Object.keys(cats).forEach(k=>{const byP={};
-            cats[k].forEach(r=>{const key=r.id;if(!key)return;if(!byP[key])byP[key]={...r,totalVal:r.numVal};
-              else{byP[key].totalVal+=r.numVal;if(!byP[key].headshot&&r.headshot)byP[key].headshot=r.headshot;}});
-            cats[k]=Object.values(byP).map(r=>({...r,value:Math.round(r.totalVal).toLocaleString(),numVal:r.totalVal})).sort((a,b)=>b.numVal-a.numVal);});
-        } else {
-          const sb=await fetchWk(wk);if(sb?.events)process(sb.events);
-          Object.keys(cats).forEach(k=>{const best={};cats[k].forEach(r=>{const key=r.id;if(!key)return;if(!best[key]||r.numVal>best[key].numVal)best[key]=r;});cats[k]=Object.values(best).sort((a,b)=>b.numVal-a.numVal);});
-        }
+    } else if(isCfb){
+      // CFB: week-based scoreboard leaders (the only reliable approach for CFB)
+      const cats={};const extra="&groups=80";
+      const fetchWk=async w=>ef(`${ep}/scoreboard?dates=${yr}&seasontype=2&week=${w}&limit=200${extra}`);
+      const process=events=>{(events||[]).forEach(ev=>{const comp=ev.competitions?.[0];if(!comp)return;
+        (comp.leaders||[]).forEach(ldr=>{const cn=ldr.displayName||ldr.name||"Other";if(!cats[cn])cats[cn]=[];
+          (ldr.leaders||[]).forEach(l=>{const at=l.athlete||{};
+            cats[cn].push({id:at.id,name:at.displayName||at.shortName||at.fullName,pos:at.position?.abbreviation,espnId:at.id,
+              headshot:at.headshot,value:l.displayValue||"",numVal:parseYds(l.displayValue),
+              team:l.team?.abbreviation||"",teamObj:l.team||comp.competitors?.find(x=>String(x.team?.id)===String(at.teamId))?.team||{}});
+          });});});};
+      if(mode==="season"){
+        // Cache check
+        const cKey=`cfb_stats_${yr}_season`;
+        if(window._ghqStatsCache[cKey]){const c=window._ghqStatsCache[cKey];setLeaders(c.cats);setCat(Object.keys(c.cats)[0]||"");setLd(false);return;}
+        const wks=Array.from({length:maxW},(_,i)=>i+1);const res=await Promise.allSettled(wks.map(w=>fetchWk(w)));
+        res.forEach(r=>{if(r.status==="fulfilled"&&r.value?.events)process(r.value.events);});
+        Object.keys(cats).forEach(k=>{const byP={};
+          cats[k].forEach(r=>{const key=r.id;if(!key)return;if(!byP[key])byP[key]={...r,totalVal:r.numVal};
+            else{byP[key].totalVal+=r.numVal;if(!byP[key].headshot&&r.headshot)byP[key].headshot=r.headshot;}});
+          cats[k]=Object.values(byP).map(r=>({...r,value:Math.round(r.totalVal).toLocaleString(),numVal:r.totalVal})).sort((a,b)=>b.numVal-a.numVal);});
+        if(Object.keys(cats).length>0){window._ghqStatsCache[cKey]={cats,ts:Date.now()};setLeaders(cats);setCat(Object.keys(cats)[0]);}
+        else setErr("No CFB stats for "+yr);
       } else {
-        // NBA, MLB, NHL, CBB, LAX: use ESPN leaders endpoint (single fast call)
-        const sp2=({nba:"basketball/nba",mlb:"baseball/mlb",nhl:"hockey/nhl",cbb:"basketball/mens-college-basketball",clx:"lacrosse/mens-college-lacrosse"})[sport]||sport;
-        const ld2=await ef(`https://site.api.espn.com/apis/site/v2/sports/${sp2}/leaders`).catch(()=>null);
-        if(ld2?.leaders){
-          ld2.leaders.forEach(cat=>{const cn=cat.displayName||cat.name||"Other";cats[cn]=[];
-            (cat.leaders||[]).forEach(l=>{const at=l.athlete||{};
-              cats[cn].push({id:at.id,name:at.displayName||at.shortName||at.fullName||"Unknown",pos:at.position?.abbreviation,espnId:at.id,
-                headshot:at.headshot,value:l.displayValue||l.value||"",numVal:parseFloat(l.value)||parseYds(l.displayValue),
-                team:at.team?.abbreviation||"",teamObj:at.team||{}});
-            });
-            cats[cn].sort((a,b)=>b.numVal-a.numVal);
+        const sb=await fetchWk(wk);if(sb?.events)process(sb.events);
+        Object.keys(cats).forEach(k=>{const best={};cats[k].forEach(r=>{const key=r.id;if(!key)return;if(!best[key]||r.numVal>best[key].numVal)best[key]=r;});cats[k]=Object.values(best).sort((a,b)=>b.numVal-a.numVal);});
+        if(Object.keys(cats).length>0){setLeaders(cats);setCat(Object.keys(cats)[0]);}
+        else setErr("No CFB stats for week "+wk);
+      }
+    } else {
+      // NBA, MLB, NHL, CBB, LAX: use ESPN leaders endpoint with season param (single fast call!)
+      const sp2=({nba:"basketball/nba",mlb:"baseball/mlb",nhl:"hockey/nhl",cbb:"basketball/mens-college-basketball",clx:"lacrosse/mens-college-lacrosse"})[sport]||sport;
+      const cats={};
+      // Try leaders endpoint with season parameter first, then without
+      let ld2=null;
+      for(const url of[
+        `https://site.api.espn.com/apis/site/v2/sports/${sp2}/leaders?season=${yr}`,
+        `https://site.api.espn.com/apis/site/v2/sports/${sp2}/leaders`
+      ]){ld2=await ef(url);if(ld2?.leaders?.length)break;}
+      if(ld2?.leaders){
+        ld2.leaders.forEach(cat=>{const cn=cat.displayName||cat.name||"Other";cats[cn]=[];
+          (cat.leaders||[]).forEach(l=>{const at=l.athlete||{};
+            cats[cn].push({id:at.id,name:at.displayName||at.shortName||at.fullName||"Unknown",pos:at.position?.abbreviation,espnId:at.id,
+              headshot:at.headshot,value:l.displayValue||l.value||"",numVal:parseFloat(l.value)||parseYds(l.displayValue),
+              team:at.team?.abbreviation||"",teamObj:at.team||{}});
           });
-        }
-        // Fallback: try scoreboard for recent games if leaders endpoint fails
-        if(Object.keys(cats).length===0){
-          const today=new Date();const ds=today.getFullYear()+String(today.getMonth()+1).padStart(2,"0")+String(today.getDate()).padStart(2,"0");
-          const sb=await ef(`${ep}/scoreboard?dates=${ds}&limit=100`).catch(()=>null);
-          if(sb?.events){(sb.events||[]).forEach(ev=>{const comp=ev.competitions?.[0];if(!comp)return;
+          cats[cn].sort((a,b)=>b.numVal-a.numVal);
+        });
+      }
+      // Fallback: try scoreboard for recent games if leaders endpoint fails
+      if(Object.keys(cats).length===0){
+        const today=new Date();const ds2=today.getFullYear()+String(today.getMonth()+1).padStart(2,"0")+String(today.getDate()).padStart(2,"0");
+        // Try today, then yesterday, then a few days back
+        for(const off of[0,-1,-2]){
+          const d=new Date(today);d.setDate(d.getDate()+off);
+          const dd=d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
+          const grp=isCbb?"&groups=50":"";
+          const sb=await ef(`${ep}/scoreboard?dates=${dd}&limit=100${grp}`).catch(()=>null);
+          if(sb?.events?.length){(sb.events||[]).forEach(ev=>{const comp=ev.competitions?.[0];if(!comp)return;
             (comp.leaders||[]).forEach(ldr=>{const cn=ldr.displayName||ldr.name||"Other";if(!cats[cn])cats[cn]=[];
               (ldr.leaders||[]).forEach(l=>{const at=l.athlete||{};
                 cats[cn].push({id:at.id,name:at.displayName||at.shortName||at.fullName,pos:at.position?.abbreviation,espnId:at.id,
                   headshot:at.headshot,value:l.displayValue||"",numVal:parseYds(l.displayValue),
                   team:l.team?.abbreviation||"",teamObj:l.team||{}});
-              });});});}
-          Object.keys(cats).forEach(k=>{const best={};cats[k].forEach(r=>{const key=r.id;if(!key)return;if(!best[key]||r.numVal>best[key].numVal)best[key]=r;});cats[k]=Object.values(best).sort((a,b)=>b.numVal-a.numVal);});
+              });});});
+            if(Object.keys(cats).length>0)break;
+          }
         }
+        Object.keys(cats).forEach(k=>{const best={};cats[k].forEach(r=>{const key=r.id;if(!key)return;if(!best[key]||r.numVal>best[key].numVal)best[key]=r;});cats[k]=Object.values(best).sort((a,b)=>b.numVal-a.numVal);});
       }
       if(Object.keys(cats).length>0){setLeaders(cats);setCat(Object.keys(cats)[0]);}
-      else setErr("No stats found — try a different year");
+      else setErr("No stats found — "+sport.toUpperCase()+" season may not be active");
     }
     setLd(false);
   })();},[yr,mode,wk]);
   const catKeys=Object.keys(leaders);const rows=(leaders[cat]||[]).slice(0,50);
-  // ESPN headshot URL from espnId or Sleeper player
-  const getImg=r=>{const eid=r.espnId||r.id;if(!eid)return null;return hsUrl(r.headshot)||`https://a.espncdn.com/combiner/i?img=/i/headshots/nfl/players/full/${eid}.png&w=96&h=70&cb=1`;};
+  // ESPN headshot URL — use sport-specific path
+  const hsPath=isNfl?"nfl":isNba?"nba":isMlb?"mlb":isNhl?"nhl":"nfl";
+  const getImg=r=>{const eid=r.espnId||r.id;if(!eid)return null;return hsUrl(r.headshot)||`https://a.espncdn.com/combiner/i?img=/i/headshots/${hsPath}/players/full/${eid}.png&w=96&h=70&cb=1`;};
   return<div><h2 style={{fontFamily:F,fontSize:18,fontWeight:800,color:S.tx,margin:"0 0 4px"}}>{title}</h2>
-    <p style={{fontFamily:F,fontSize:11,color:S.dm,margin:"0 0 8px"}}>{isNfl?"Real stats via Sleeper API":hasWeeks?"Game leaders from ESPN scoreboards":"Season leaders from ESPN"}</p>
+    <p style={{fontFamily:F,fontSize:11,color:S.dm,margin:"0 0 8px"}}>{isNfl?"Real stats via Sleeper API":isCfb?"Game leaders from ESPN scoreboards":"Season leaders from ESPN"}</p>
     <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{years.map(y=><Pill key={y} l={""+y} a={yr===y} c={S.yl} onClick={()=>setYr(y)}/>)}</div>
-    <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}><Pill l="Full Season" a={mode==="season"} c={S.gn} onClick={()=>setMode("season")}/><Pill l="By Week" a={mode==="week"} c={S.tl} onClick={()=>setMode("week")}/></div>
-    {mode==="week"&&<div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:8}}>{Array.from({length:hasWeeks?maxW:20},(_,i)=>i+1).map(w=><Pill key={w} l={"W"+w} a={wk===w} c={S.tl} onClick={()=>setWk(w)} sm/>)}</div>}
+    {hasWeeks&&<><div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}><Pill l="Full Season" a={mode==="season"} c={S.gn} onClick={()=>setMode("season")}/><Pill l="By Week" a={mode==="week"} c={S.tl} onClick={()=>setMode("week")}/></div>
+    {mode==="week"&&<div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:8}}>{Array.from({length:maxW},(_,i)=>i+1).map(w=><Pill key={w} l={"W"+w} a={wk===w} c={S.tl} onClick={()=>setWk(w)} sm/>)}</div>}</>}
     <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:14}}>{catKeys.map(k=><Pill key={k} l={k} a={cat===k} c={clr} onClick={()=>setCat(k)} sm/>)}</div>
     <Err m={err}/>{ld?<Spin t={"Loading "+sport.toUpperCase()+" stats..."}/>:rows.length===0?<Emp t="Select a category" ic="📊"/>:
     <Card style={{overflow:"auto",maxHeight:620}}>
@@ -759,9 +787,10 @@ function SearchBar({onSelect}){
     CFB.forEach(t=>{if(t.n.toLowerCase().includes(ql))results.push({type:"team",name:t.n,sub:t.cn+" · Football",sport:"cfb",img:cL(t.eid),data:t});});
     CBB.forEach(t=>{if(t.n.toLowerCase().includes(ql))results.push({type:"team",name:t.n,sub:t.cn+" · Basketball",sport:"cbb",img:cL(t.eid),data:t});});
     CLX.forEach(t=>{if(t.n.toLowerCase().includes(ql))results.push({type:"team",name:t.n,sub:t.cn+" · Lacrosse",sport:"clx",img:cL(t.eid),data:t});});
-    // Sleeper player search (works well, no CORS)
+    // Sleeper player search (works well, no CORS) — use cached player DB if available
     try{
-      const pd=await fetch("https://api.sleeper.app/v1/players/nfl").then(r=>r.ok?r.json():null).catch(()=>null);
+      let pd=window._ghqSleeperPD;
+      if(!pd){pd=await fetch("https://api.sleeper.app/v1/players/nfl").then(r=>r.ok?r.json():null).catch(()=>null);if(pd)window._ghqSleeperPD=pd;}
       if(pd){Object.entries(pd).forEach(([pid,p])=>{
         if(!p.first_name||!p.last_name)return;
         const fn=((p.first_name||"")+" "+(p.last_name||"")).toLowerCase();
@@ -807,11 +836,12 @@ function SearchBar({onSelect}){
 // ═══ TRENDING / WAIVER WIRE (Sleeper) ═══
 function Trending(){
   const[adds,setAdds]=useState([]);const[drops,setDrops]=useState([]);const[pd,setPd]=useState(null);const[ld,setLd]=useState(true);const[mode,setMode]=useState("add");
-  useEffect(()=>{setLd(true);Promise.all([
-    fetch("https://api.sleeper.app/v1/players/nfl").then(r=>r.ok?r.json():null).catch(()=>null),
-    fetch("https://api.sleeper.app/v1/players/nfl/trending/add?limit=30").then(r=>r.ok?r.json():null).catch(()=>null),
-    fetch("https://api.sleeper.app/v1/players/nfl/trending/drop?limit=30").then(r=>r.ok?r.json():null).catch(()=>null)
-  ]).then(([p,a,d])=>{setPd(p);setAdds(a||[]);setDrops(d||[]);setLd(false);});},[]);
+  useEffect(()=>{setLd(true);
+    const pdProm=window._ghqSleeperPD?Promise.resolve(window._ghqSleeperPD):fetch("https://api.sleeper.app/v1/players/nfl").then(r=>r.ok?r.json():null).catch(()=>null);
+    Promise.all([pdProm,
+      fetch("https://api.sleeper.app/v1/players/nfl/trending/add?limit=30").then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch("https://api.sleeper.app/v1/players/nfl/trending/drop?limit=30").then(r=>r.ok?r.json():null).catch(()=>null)
+    ]).then(([p,a,d])=>{if(p&&!window._ghqSleeperPD)window._ghqSleeperPD=p;setPd(p);setAdds(a||[]);setDrops(d||[]);setLd(false);});},[]);
   const list=mode==="add"?adds:drops;
   const getP=id=>pd?.[id]||{};
   return<div><h2 style={{fontFamily:F,fontSize:18,fontWeight:800,color:S.tx,margin:"0 0 4px"}}>🔥 Waiver Wire</h2>
@@ -834,7 +864,7 @@ function Trending(){
 // ═══ INJURIES (from Sleeper) ═══
 function Injuries(){
   const[players,setPlayers]=useState([]);const[ld,setLd]=useState(true);const[posF,setPosF]=useState("ALL");const[teamF,setTeamF]=useState("ALL");
-  useEffect(()=>{setLd(true);fetch("https://api.sleeper.app/v1/players/nfl").then(r=>r.ok?r.json():null).then(pd=>{
+  useEffect(()=>{setLd(true);const pdProm=window._ghqSleeperPD?Promise.resolve(window._ghqSleeperPD):fetch("https://api.sleeper.app/v1/players/nfl").then(r=>r.ok?r.json():null);pdProm.then(pd=>{if(pd&&!window._ghqSleeperPD)window._ghqSleeperPD=pd;
     if(!pd){setLd(false);return;}
     const inj=[];Object.entries(pd).forEach(([pid,p])=>{
       if(p.injury_status&&p.active&&p.team&&["QB","RB","WR","TE","K","LB","CB","S","DE","DT","OL","OT","OG"].includes(p.position)){
@@ -863,8 +893,8 @@ function Injuries(){
 }
 
 // ═══ H2H MATCHUP ═══
-function H2H(){
-  const[sp,setSp]=useState("nfl");const[t1,setT1]=useState(null);const[t2,setT2]=useState(null);const[d1,setD1]=useState(null);const[d2,setD2]=useState(null);const[ld,setLd]=useState(false);
+function H2H({defSport="nfl"}){
+  const[sp,setSp]=useState(defSport);const[t1,setT1]=useState(null);const[t2,setT2]=useState(null);const[d1,setD1]=useState(null);const[d2,setD2]=useState(null);const[ld,setLd]=useState(false);
   const allTeams={nfl:NFL,nba:NBA,mlb:MLB,nhl:NHL};const teams=allTeams[sp]||NFL;
   const logoFn={nfl:t=>nL(t.a),nba:t=>nbL(t.eid),mlb:t=>mlL(t.eid),nhl:t=>nhL(t.eid)};
   const statNames={nfl:[["pointsFor","Points For"],["pointsAgainst","Points Against"]],nba:[["pointsFor","Points/Game"],["pointsAgainst","Opp Pts/Game"]],mlb:[["runsScored","Runs Scored"],["runsAllowed","Runs Allowed"]],nhl:[["goalsFor","Goals For"],["goalsAgainst","Goals Against"]]};
@@ -907,7 +937,7 @@ function PlayerCompare(){
   const[p1,setP1]=useState(null);const[p2,setP2]=useState(null);const[d1,setD1]=useState(null);const[d2,setD2]=useState(null);
   const[q1,setQ1]=useState("");const[q2,setQ2]=useState("");const[r1,setR1]=useState([]);const[r2,setR2]=useState([]);const[ld,setLd]=useState(false);
   const[pd,setPd]=useState(null);
-  useEffect(()=>{fetch("https://api.sleeper.app/v1/players/nfl").then(r=>r.ok?r.json():null).then(setPd).catch(()=>{});},[]);
+  useEffect(()=>{if(window._ghqSleeperPD){setPd(window._ghqSleeperPD);return;}fetch("https://api.sleeper.app/v1/players/nfl").then(r=>r.ok?r.json():null).then(d=>{if(d){window._ghqSleeperPD=d;setPd(d);}}).catch(()=>{});},[]);
   const search=(q,setR)=>{if(!pd||q.length<2){setR([]);return;}const ql=q.toLowerCase();const res=[];
     Object.entries(pd).forEach(([pid,p])=>{const fn=((p.first_name||"")+" "+(p.last_name||"")).toLowerCase();
       if(fn.includes(ql)&&p.active&&["QB","RB","WR","TE","K"].includes(p.position)){
@@ -916,19 +946,23 @@ function PlayerCompare(){
     });setR(res.slice(0,8));};
   useEffect(()=>{const t=setTimeout(()=>search(q1,setR1),300);return()=>clearTimeout(t);},[q1,pd]);
   useEffect(()=>{const t=setTimeout(()=>search(q2,setR2),300);return()=>clearTimeout(t);},[q2,pd]);
-  // Load stats for selected players
-  useEffect(()=>{if(!p1)return;setLd(true);
-    const yr=2025;const weeks=Array.from({length:18},(_,i)=>i+1);
-    Promise.allSettled(weeks.map(w=>fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${yr}/${w}`).then(r=>r.ok?r.json():null))).then(rs=>{
-      const t={pass_yd:0,pass_td:0,pass_int:0,rush_yd:0,rush_td:0,rec:0,rec_yd:0,rec_td:0,gp:0,pts_ppr:0};
-      rs.forEach(r=>{if(r.status!=="fulfilled"||!r.value)return;const s=r.value[p1.id];if(s){t.pass_yd+=(s.pass_yd||0);t.pass_td+=(s.pass_td||0);t.pass_int+=(s.pass_int||0);t.rush_yd+=(s.rush_yd||0);t.rush_td+=(s.rush_td||0);t.rec+=(s.rec||0);t.rec_yd+=(s.rec_yd||0);t.rec_td+=(s.rec_td||0);t.gp+=(s.gp||0);t.pts_ppr+=(s.pts_ppr||0);}});
-      setD1(t);setLd(false);});},[p1?.id]);
-  useEffect(()=>{if(!p2)return;setLd(true);
-    const yr=2025;const weeks=Array.from({length:18},(_,i)=>i+1);
-    Promise.allSettled(weeks.map(w=>fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${yr}/${w}`).then(r=>r.ok?r.json():null))).then(rs=>{
-      const t={pass_yd:0,pass_td:0,pass_int:0,rush_yd:0,rush_td:0,rec:0,rec_yd:0,rec_td:0,gp:0,pts_ppr:0};
-      rs.forEach(r=>{if(r.status!=="fulfilled"||!r.value)return;const s=r.value[p2.id];if(s){t.pass_yd+=(s.pass_yd||0);t.pass_td+=(s.pass_td||0);t.pass_int+=(s.pass_int||0);t.rush_yd+=(s.rush_yd||0);t.rush_td+=(s.rush_td||0);t.rec+=(s.rec||0);t.rec_yd+=(s.rec_yd||0);t.rec_td+=(s.rec_td||0);t.gp+=(s.gp||0);t.pts_ppr+=(s.pts_ppr||0);}});
-      setD2(t);setLd(false);});},[p2?.id]);
+  // Load stats for both players — share the weekly data to avoid duplicate API calls
+  const[weekData,setWeekData]=useState(null);
+  useEffect(()=>{if(!p1&&!p2)return;if(weekData)return;// Already fetched
+    setLd(true);const yr=2025;const cKey="cmp_weeks_"+yr;
+    if(window._ghqStatsCache[cKey]){setWeekData(window._ghqStatsCache[cKey].data);setLd(false);return;}
+    Promise.allSettled(Array.from({length:18},(_,i)=>fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${yr}/${i+1}`).then(r=>r.ok?r.json():null))).then(rs=>{
+      const data=rs.map(r=>r.status==="fulfilled"?r.value:null);
+      window._ghqStatsCache[cKey]={data,ts:Date.now()};setWeekData(data);setLd(false);});},[p1?.id,p2?.id]);
+  // Extract stats for each player from shared week data
+  useEffect(()=>{if(!weekData||!p1)return;
+    const t={pass_yd:0,pass_td:0,pass_int:0,rush_yd:0,rush_td:0,rec:0,rec_yd:0,rec_td:0,gp:0,pts_ppr:0};
+    weekData.forEach(w=>{if(!w)return;const s=w[p1.id];if(s){t.pass_yd+=(s.pass_yd||0);t.pass_td+=(s.pass_td||0);t.pass_int+=(s.pass_int||0);t.rush_yd+=(s.rush_yd||0);t.rush_td+=(s.rush_td||0);t.rec+=(s.rec||0);t.rec_yd+=(s.rec_yd||0);t.rec_td+=(s.rec_td||0);t.gp+=(s.gp||0);t.pts_ppr+=(s.pts_ppr||0);}});
+    setD1(t);},[p1?.id,weekData]);
+  useEffect(()=>{if(!weekData||!p2)return;
+    const t={pass_yd:0,pass_td:0,pass_int:0,rush_yd:0,rush_td:0,rec:0,rec_yd:0,rec_td:0,gp:0,pts_ppr:0};
+    weekData.forEach(w=>{if(!w)return;const s=w[p2.id];if(s){t.pass_yd+=(s.pass_yd||0);t.pass_td+=(s.pass_td||0);t.pass_int+=(s.pass_int||0);t.rush_yd+=(s.rush_yd||0);t.rush_td+=(s.rush_td||0);t.rec+=(s.rec||0);t.rec_yd+=(s.rec_yd||0);t.rec_td+=(s.rec_td||0);t.gp+=(s.gp||0);t.pts_ppr+=(s.pts_ppr||0);}});
+    setD2(t);},[p2?.id,weekData]);
   const StatBar=({label,v1,v2,better="high"})=>{const max=Math.max(v1||1,v2||1);const b1=better==="high"?v1>=v2:v1<=v2;const b2=better==="high"?v2>=v1:v2<=v1;
     return<div style={{marginBottom:10}}><div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:8,alignItems:"center"}}>
       <div style={{textAlign:"right"}}><span style={{fontFamily:F,fontSize:16,fontWeight:800,color:b1?S.gn:S.sub}}>{typeof v1==="number"?v1.toLocaleString():"—"}</span></div>
@@ -1067,7 +1101,7 @@ function DraftBoard(){
 // ═══ TRADE ANALYZER ═══
 function TradeAnalyzer(){
   const[pd,setPd]=useState(null);const[give,setGive]=useState([]);const[get,setGet]=useState([]);const[q,setQ]=useState("");const[res,setRes]=useState([]);const[side,setSide]=useState("give");
-  useEffect(()=>{fetch("https://api.sleeper.app/v1/players/nfl").then(r=>r.ok?r.json():null).then(setPd).catch(()=>{});},[]);
+  useEffect(()=>{if(window._ghqSleeperPD){setPd(window._ghqSleeperPD);return;}fetch("https://api.sleeper.app/v1/players/nfl").then(r=>r.ok?r.json():null).then(d=>{if(d){window._ghqSleeperPD=d;setPd(d);}}).catch(()=>{});},[]);
   const search=useCallback((q)=>{if(!pd||q.length<2){setRes([]);return;}const ql=q.toLowerCase();const r=[];
     Object.entries(pd).forEach(([pid,p])=>{const fn=((p.first_name||"")+" "+(p.last_name||"")).toLowerCase();
       if(fn.includes(ql)&&p.active&&["QB","RB","WR","TE","K"].includes(p.position)){
@@ -1588,7 +1622,7 @@ function Promos(){
     <h2 style={{fontFamily:F,fontSize:18,fontWeight:800,color:S.tx,margin:"0 0 4px"}}>🎁 Sportsbook Promos</h2>
     <p style={{fontFamily:F,fontSize:10,color:S.dm,margin:"0 0 12px"}}>New user sign-up bonuses — support GameDay by signing up through our links</p>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(280px,100%),1fr))",gap:8}}>
-      {books.map(b=><Card key={b.name} hover><div style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
+      {books.map(b=><Card key={b.name} hover><a href={b.url} target="_blank" rel="noopener noreferrer" style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:12,textDecoration:"none"}}>
         <div style={{width:44,height:44,borderRadius:10,background:b.color,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:F,fontSize:14,fontWeight:900,color:"#fff",flexShrink:0}}>{b.name[0]}{b.name[1]}</div>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontFamily:F,fontSize:13,fontWeight:800,color:S.tx}}>{b.name}</div>
@@ -1596,7 +1630,7 @@ function Promos(){
           <div style={{fontFamily:F,fontSize:9,color:S.dm,marginTop:3}}>21+ | Terms apply | Gambling problem? Call 1-800-GAMBLER</div>
         </div>
         <div style={{background:b.color,borderRadius:6,padding:"6px 10px",fontFamily:F,fontSize:10,fontWeight:700,color:"#fff",cursor:"pointer",flexShrink:0}}>CLAIM</div>
-      </div></Card>)}
+      </a></Card>)}
     </div>
     <Card style={{marginTop:12,padding:14}}>
       <div style={{fontFamily:F,fontSize:12,fontWeight:700,color:S.yl,marginBottom:6}}>💰 Support GameDay</div>
@@ -1879,7 +1913,7 @@ export default function App(){
     NHL:[{id:"hlsc",i:"🏒",l:"Scores"},{id:"hlst",i:"📊",l:"Standings"},{id:"hlro",i:"👥",l:"Rosters"},{id:"hlsa",i:"📈",l:"Stats"},{id:"hlh2h",i:"⚔️",l:"H2H"}],
     CFB:[{id:"csc",i:"🏈",l:"Scores"},{id:"crk",i:"🏆",l:"Rankings"},{id:"cro",i:"📋",l:"Rosters"},{id:"cst",i:"📈",l:"Stats"}],
     CBB:[{id:"bmm",i:"🏆",l:"Bracket"},{id:"bpk",i:"🎯",l:"Picks"},{id:"bms",i:"📺",l:"Tourney"},{id:"bsc",i:"🏀",l:"Scores"},{id:"brk",i:"🏆",l:"Rankings"},{id:"bro",i:"📋",l:"Rosters"},{id:"bst",i:"📈",l:"Stats"}],
-    LAX:[{id:"lxsc",i:"🥍",l:"Scores"},{id:"lxro",i:"📋",l:"Teams"}],
+    LAX:[{id:"lxsc",i:"🥍",l:"Scores"},{id:"lxro",i:"📋",l:"Teams"},{id:"lxsa",i:"📈",l:"Stats"}],
     FAN:[{id:"fan",i:"⚡",l:"Fantasy"},{id:"trn",i:"🔥",l:"Waivers"},{id:"drft",i:"📋",l:"Draft"},{id:"trd",i:"⚖️",l:"Trade"},{id:"cmp",i:"🔄",l:"Compare"}],
     ODDS:[{id:"bet",i:"💰",l:"Betting"},{id:"par",i:"🎯",l:"Parlay"},{id:"prop",i:"🎲",l:"Props"},{id:"ocp",i:"📊",l:"Compare"},{id:"npr",i:"🔬",l:"Props Lab"}],
     MORE:[{id:"inj",i:"🏥",l:"Injuries"},{id:"nw",i:"📰",l:"News"},{id:"promo",i:"🎁",l:"Promos"}]
@@ -1896,7 +1930,7 @@ export default function App(){
     <div style={{fontFamily:"'Inter',sans-serif",fontSize:11,color:"#10b981",marginTop:6,letterSpacing:2,fontWeight:600}}>EVERY SPORT · EVERY SCORE · EVERY EDGE</div>
     <style>{"@keyframes logoIn{0%{transform:scale(0) rotate(-180deg);opacity:0}60%{transform:scale(1.1) rotate(10deg);opacity:1}100%{transform:scale(1) rotate(0deg);opacity:1}}"}</style>
   </div>;
-  return<><style key={theme}>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');@keyframes spin{to{transform:rotate(360deg)}}*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}body{background:${S.bg};color:${S.tx};overflow-x:hidden}::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:${S.bg}}::-webkit-scrollbar-thumb{background:${S.bd};border-radius:3px}button{font-family:${F}}input{font-family:${F}}`}</style>
+  return<><style key={theme}>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}body{background:${S.bg};color:${S.tx};overflow-x:hidden}::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:${S.bg}}::-webkit-scrollbar-thumb{background:${S.bd};border-radius:3px}button{font-family:${F}}input{font-family:${F}}`}</style>
     <header style={{background:S.bg+"ee",backdropFilter:"blur(12px)",borderBottom:"1px solid "+S.bd,position:"sticky",top:0,zIndex:200}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 12px"}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -1940,13 +1974,14 @@ export default function App(){
       {sub==="bmm"&&<MarchMadness/>}
       {sub==="bpk"&&<MarchPicks/>}
       {sub==="bms"&&<MarchScores/>}
-      {sub==="bsc"&&<Scores sport="cbb" title="CBB Scores" yearRange={[2026,2025,2024,2023]} defYear={2025} color={S.or} showConf/>}
-      {sub==="brk"&&<Rankings title="CBB Rankings" sport="cbb" yearRange={[2026,2025,2024,2023]} defYear={2025} color={S.or} mw={20} defWk={16}/>}
+      {sub==="bsc"&&<Scores sport="cbb" title="CBB Scores" yearRange={[2026,2025,2024,2023]} defYear={2026} color={S.or} showConf/>}
+      {sub==="brk"&&<Rankings title="CBB Rankings" sport="cbb" yearRange={[2026,2025,2024,2023]} defYear={2026} color={S.or} mw={20} defWk={16}/>}
       {sub==="bro"&&<Rosters title="CBB Rosters" teams={CBB} sport="cbb" nf="n" cf="cl" lf={t=>cL(t.eid)}/>}
       {sub==="bst"&&<Stats sport="cbb" title="CBB Stat Leaders" color={S.or}/>}
-      {sub==="lxsc"&&<Scores sport="clx" title="🥍 Lacrosse Scores" yearRange={[2026,2025,2024,2023]} defYear={2025} color={"#7c3aed"}/>}
+      {sub==="lxsc"&&<Scores sport="clx" title="🥍 Lacrosse Scores" yearRange={[2026,2025,2024,2023]} defYear={2026} color={"#7c3aed"}/>}
       {sub==="lxro"&&<Rosters title="🥍 Lacrosse Teams" teams={CLX} sport="clx" nf="n" cf="cl" lf={t=>cL(t.eid)}/>}
-      {sub==="nbsc"&&<Scores sport="nba" title="NBA Scores" yearRange={[2026,2025,2024,2023]} defYear={2025} color={S.pp}/>}
+      {sub==="lxsa"&&<Stats sport="clx" title="🥍 Lacrosse Stat Leaders" color={"#7c3aed"}/>}
+      {sub==="nbsc"&&<Scores sport="nba" title="NBA Scores" yearRange={[2026,2025,2024,2023]} defYear={2026} color={S.pp}/>}
       {sub==="nbst"&&<Standings sport="nba"/>}
       {sub==="nbro"&&<Rosters title="NBA Rosters" teams={NBA} sport="nba" nf="f" cf="cl" lf={t=>nbL(t.eid)}/>}
       {sub==="nbsa"&&<Stats sport="nba" title="NBA Stat Leaders" color={S.pp}/>}
@@ -1954,7 +1989,7 @@ export default function App(){
       {sub==="mlst"&&<Standings sport="mlb"/>}
       {sub==="mlro"&&<Rosters title="MLB Rosters" teams={MLB} sport="mlb" nf="f" cf="cl" lf={t=>mlL(t.eid)}/>}
       {sub==="mlsa"&&<Stats sport="mlb" title="MLB Stat Leaders" color={S.rd}/>}
-      {sub==="hlsc"&&<Scores sport="nhl" title="NHL Scores" yearRange={[2026,2025,2024,2023]} defYear={2025} color={S.tl}/>}
+      {sub==="hlsc"&&<Scores sport="nhl" title="NHL Scores" yearRange={[2026,2025,2024,2023]} defYear={2026} color={S.tl}/>}
       {sub==="hlst"&&<Standings sport="nhl"/>}
       {sub==="hlro"&&<Rosters title="NHL Rosters" teams={NHL} sport="nhl" nf="f" cf="cl" lf={t=>nhL(t.eid)}/>}
       {sub==="hlsa"&&<Stats sport="nhl" title="NHL Stat Leaders" color={S.tl}/>}
@@ -1963,9 +1998,9 @@ export default function App(){
       {sub==="nmk"&&<MockDraftSim/>}
       {sub==="nfa"&&<FreeAgentTracker/>}
       {sub==="npr"&&<PropsLab/>}
-      {sub==="nbh2h"&&<H2H/>}
-      {sub==="mlh2h"&&<H2H/>}
-      {sub==="hlh2h"&&<H2H/>}
+      {sub==="nbh2h"&&<H2H defSport="nba"/>}
+      {sub==="mlh2h"&&<H2H defSport="mlb"/>}
+      {sub==="hlh2h"&&<H2H defSport="nhl"/>}
       {sub==="bet"&&<Betting/>}
       {sub==="par"&&<ParlayBuilder/>}
       {sub==="prop"&&<PropBets/>}

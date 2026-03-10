@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0f1a"/>
+      <stop offset="100%" stop-color="#0d1520"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <path d="M545,200 C530,200 519,204 513,210 C507,216 503,224 503,234 C503,244 507,251 513,258 C519,264 530,268 545,268 L545,239 L528,239 L528,228 L559,228 L559,268 C553,271 547,272 539,272 C525,272 514,267 507,260 C500,253 496,243 496,232 C496,220 500,211 507,204 C514,197 525,192 539,192 C547,192 554,194 560,197 L556,209 C551,206 545,200 545,200 Z" fill="#10b981" opacity="0.95" transform="translate(0,50)"/>
+  <text x="590" y="270" fill="#ffffff" font-family="system-ui,sans-serif" font-size="72" font-weight="900" letter-spacing="-2">GameDay</text>
+  <text x="498" y="330" fill="#10b981" font-family="system-ui,sans-serif" font-size="20" font-weight="600" letter-spacing="3">EVERY SPORT · EVERY SCORE · EVERY EDGE</text>
+  <text x="340" y="420" fill="#3b82f6" font-family="system-ui,sans-serif" font-size="28" font-weight="700">🏈 NFL  🏀 NBA  ⚾ MLB  🏒 NHL  🏈 CFB  🏀 CBB</text>
+  <text x="390" y="470" fill="#7f8ea0" font-family="system-ui,sans-serif" font-size="18" font-weight="500">Live Scores · Odds Comparison · Fantasy Tools · March Madness</text>
+  <text x="485" y="530" fill="#eab308" font-family="system-ui,sans-serif" font-size="22" font-weight="700">Free · No Ads · No Login Required</text>
+  <text x="500" y="580" fill="#475569" font-family="system-ui,sans-serif" font-size="16">getgameday.live</text>
+</svg>
